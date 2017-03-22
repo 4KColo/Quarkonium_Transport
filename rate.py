@@ -22,7 +22,14 @@ rho_c = 1.0/(N_C**2-1.0)
 C_F = 4.0/3.0
 a_B = 2.0/(alpha_s*C_F*M)
 E_1S = alpha_s*C_F/(2.0*a_B)  # here is magnitude, true value is its negative
-
+v_min = 0.01
+v_max = 0.99
+T_min = 150.0
+T_max = 500.0
+q_min = E_1S+0.01 # for sample initial gluon in the gluo-dissociation
+q_max = 10*E_1S+0.01
+p_rel_min = 4.0 #ln value of p_rel min and max, used in the formation cross section
+p_rel_max = 8.6
 
 
 ###------- first we assume the potential is unscreened Coulomb ------
@@ -83,8 +90,8 @@ def fcros_1S(p, T):
 #---- build the dissociation rate table ---
 g_disso = []
 
-v = np.linspace(0.01,0.99,50)
-T = np.linspace(150.0, 500.0, 101)
+v = np.linspace(v_min, v_max, 50)
+T = np.linspace(T_min, T_max, 101)
 len_v = len(v)
 len_T = len(T)
 
@@ -110,7 +117,7 @@ f1.close()
 
 
 #---- construct the dissociation initial sampling table ----
-q = np.linspace(E_1S+0.01, 10*E_1S+0.01, 101)
+q = np.linspace(q_min, q_max, 101)
 len_q = len(q)
 
 array_vTq = np.vstack(np.meshgrid(v,T,q)).reshape(3,-1).T
@@ -150,13 +157,13 @@ f4.close()
 
 #---- build the formation cross section table ---
 g_form = []		
-#p_rel = np.exp(np.linspace(3.9, 8.9, 100))  # for bottomonium
-p_rel = np.exp(np.linspace(3.0, 8.0, 101))  # for charmonium
+p_rel = np.exp(np.linspace(p_rel_min, p_rel_max, 101))  # for bottomonium
 len_p = len(p_rel)
 
 X2, Y2 = np.meshgrid(p_rel,T)
 pT = np.array([X2.flatten(),Y2.flatten()]).T
 
+#print pT
 
 for i in range(len_T):
 	for j in range(len_p):
@@ -164,7 +171,6 @@ for i in range(len_T):
 
 g_form = np.array(g_form)
 table_g_form = np.append(pT,g_form,axis=1)
-
 
 
 
@@ -203,11 +209,11 @@ rate_1 = []
 rate_5 = []
 rate_9 = []
 fcros = []
-T = np.linspace(170.0, 450.0, 1000)
-p = np.linspace(1.0, 10000.0, 1000)
+T = np.linspace(170.0, 450.0, 101)
+p = np.linspace(60.0, 3500.0, 101)
 length = len(T)
 for i in range(length):
-	fcros.append(fcros_1S(p[i],300.0)*197.326**2)
+	fcros.append(fcros_1S(p[i],500.0)*197.326**2)
 	#rate_1.append(drate_1S(0.1,T[i]))
 	#rate_5.append(drate_1S(0.5,T[i]))
 	#rate_9.append(drate_1S(0.9,T[i]))
