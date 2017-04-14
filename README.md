@@ -2,4 +2,5 @@ Python module that deals with the quarkonium transport inside the quark-gluon pl
 
 Quarkonium_recombine.py is the module for recombination. It can return the recombination cross section given the momenta and positions of the QQbar and the local temperature. It can determine whether recombination occurs and sample the final outgoing gluon momentum in the c.o.m. frame of the QQbar. The quarkonium should move in the opposite direction. All these are for gluo-formation.
 
-Quarkonium_evolution.py is the module for evolution. So far it has the static meidum mode with the decay process implemented. The initial condistions are sampled from uniform distributions in a box. The heavy quarks, anti-quarks and quarkonium (Upsilon(1S)) is free streaming first and then, the decay process is considered. It will update the position and momentum lists for all three particels. 
+Quarkonium_evolution.py is the module for evolution. Now it has the static medium mode with both dissociation and recombination implenmented. The initial condistions are sampled from uniform distributions in a box. The heavy quarks, anti-quarks and quarkonium (Upsilon(1S)) is free streaming first and then, the decay and recombination processes are considered. It will update the position and momentum lists for all three particels. 
+
