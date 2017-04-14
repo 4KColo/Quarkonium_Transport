@@ -22,6 +22,8 @@ rho_c = 1.0/(N_C**2-1.0)
 C_F = 4.0/3.0
 a_B = 2.0/(alpha_s*C_F*M)
 E_1S = alpha_s*C_F/(2.0*a_B)  # here is magnitude, true value is its negative
+C1 = 197.327				  # 197 MeV*fm = 1
+
 v_min = 0.01
 v_max = 0.99
 T_min = 150.0
@@ -31,8 +33,12 @@ q_max = 10*E_1S+0.01
 p_rel_min = 4.0 #ln value of p_rel min and max, used in the formation cross section
 p_rel_max = 8.6
 
+N_v = 49.0   # this is the number of spacings, real number is N+1
+N_T = 100.0
+N_q = 100.0
+N_pr = 100.0
 
-###------- first we assume the potential is unscreened Coulomb ------
+### ----------------- first we assume the potential is unscreened Coulomb ------
 #---- matrix element squared of 1S: |< 1S|r| Psi_p >|^2
 def matrix_1S(p):
 	eta = alpha_s*M/(4.0*N_C*p)
@@ -40,8 +46,8 @@ def matrix_1S(p):
 	return Nume/( (1.0+(a_B*p)**2)**6 * (np.exp(2.0*3.1416*eta)-1.0) )
 
 
-#---- cross section of 1S
-def cros_1S(q):
+#---- decay cross section of 1S ----
+def dcros_1S(q):
 	assert isinstance(q,float)
 	t1 = np.sqrt(q/E_1S-1.0) #-- the value of q must be larger than E_1S
 	Const = alpha_s*C_F/3.0 *2.0**10*3.1416**2 * rho_c*(2.0+rho_c)**2
@@ -49,11 +55,51 @@ def cros_1S(q):
 
 
 #---- one can also use the following cross section expression to test the matrix element is correct
-def cros_1S_test(q):
+def dcros_1S_test(q):
 	p = np.sqrt(M*(q-E_1S))
 	return 2.0/3.0*alpha_s*C_F*q*M*p*matrix_1S(p)
 
 
+### ----------------- end of unscreened Coulomb potential results --------
+
+
+
+### ------------------------ gluo-dissociation decay rate -------------------- ###
+#---- first define moving frame factor ----
+def fac1(z):
+	return np.log(1.0-np.exp(-z))
+
+
+#---- decay rate of 1S in the medium frame, v = c.o.m. velocity of quarkonium
+#---- T is the medium temperature at the position of quarkonium
+def drate_1S(v,T):
+	gamma = 1.0/np.sqrt(1.0-v**2)
+	I = si.quad(lambda q: q*dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ), E_1S, 100*E_1S )[0]
+	return I * T / (4.0*3.1416**2*v*gamma**2)
+
+
+#---- integrand of dq, used in the initial state sampling -----
+def initsam(v,T,q):
+	gamma = 1.0/np.sqrt(1.0-v**2)
+	return dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ) * T / (4.0*3.1416**2*v*gamma**2)
+
+
+### ------------------------ end of gluo-dissociation -------------------- ###
+
+
+
+### ------- formation cross section times relative velocity in the QQbar CM frame ------
+#------ p is the relative momentum between the QQbar in the QQbar CM frame ------
+def fcros_1S(v, T, p):
+	gamma = 1.0/np.sqrt(1.0-v**2)
+	q = p**2/M + E_1S
+	angle_part = 2.0 + T/(gamma*q*v)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) )
+	return 2.0*alpha_s*C_F/3.0*q**3*matrix_1S(p)*angle_part
+
+
+
+
+'''
 #---- moving frame factor
 #---- PAY ATTNENTION to how spence is defined in scipy.special
 def fac1(z):
@@ -64,34 +110,33 @@ def fac1(z):
 #---- T is the medium temperature at the position of quarkonium
 def drate_1S(v,T):
 	gamma = 1.0/np.sqrt(1.0-v**2)
-	I = si.quad(lambda q: cros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ), E_1S, 100*E_1S )[0]
+	I = si.quad(lambda q: dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ), E_1S, 100*E_1S )[0]
 	return I * T**2/(4.0*3.1416**2*gamma*v)
 
 #---- integrand of dq, used in the initial state sampling
 def initsam(v,T,q):
 	gamma = 1.0/np.sqrt(1.0-v**2)
-	return cros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ) * T**2/(4.0*3.1416**2*gamma*v)
+	return dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ) * T**2/(4.0*3.1416**2*gamma*v)
 
 
 
-#---- formation cross section in the rest frame of the QQbar pair
-#---- p is the relative momentum between the QQbar
+#------ formation cross section times relative velocity in the QQbar CM frame ------
+#------ p is the relative momentum between the QQbar in the QQbar CM frame ------
 def fcros_1S(p, T):
-	v_rel = p/np.sqrt(p**2/4.0+M**2)
 	q = p**2/M + E_1S
-	return 4.0*alpha_s*C_F/(3.0*v_rel)*q**3/(1.0-np.exp(-q/T))*matrix_1S(p)
+	return 4.0*alpha_s*C_F/3.0*q**3/(1.0-np.exp(-q/T))*matrix_1S(p)
+'''
 
 
 
 
 
 
-
-#---- build the dissociation rate table ---
+####-------------- build the dissociation rate table ---------#####
 g_disso = []
 
-v = np.linspace(v_min, v_max, 50)
-T = np.linspace(T_min, T_max, 101)
+v = np.linspace(v_min, v_max, N_v+1)
+T = np.linspace(T_min, T_max, N_T+1)
 len_v = len(v)
 len_T = len(T)
 
@@ -111,19 +156,20 @@ table_g_disso = np.append(vT,g_disso,axis=1)
 
 
 f1 = h5py.File('b_g_disso.hdf5')
-dset1 = f1.create_dataset('ds1',data=table_g_disso)
+f1.create_dataset('ds',data=table_g_disso)
 f1.close()
 
 
 
-#---- construct the dissociation initial sampling table ----
-q = np.linspace(q_min, q_max, 101)
+####--------- construct the gluo-dissociation initial sampling table ----
+q = np.linspace(q_min, q_max, N_q+1)
 len_q = len(q)
 
 array_vTq = np.vstack(np.meshgrid(v,T,q)).reshape(3,-1).T
 #### Attention! index of q changes first, then that of v and finally that of T
 sam_g_disso = [] #to construct the table for initial sampling
 max_sam_g_disso = [] # obtain the max value when sampling, which depends on v,T
+
 
 for i in range(len_T):
 	for j in range(len_v):
@@ -143,47 +189,55 @@ max_sam_g_disso = np.array(max_sam_g_disso)
 table_max_sam_g_disso = np.append(vT, max_sam_g_disso, axis=1)
 
 
-f3 = h5py.File('sam_g_disso.hdf5')
-dset3 = f3.create_dataset('ds3',data=table_sam_g_disso)
+f2 = h5py.File('sam_g_disso.hdf5')
+f2.create_dataset('ds',data=table_sam_g_disso)
+f2.close()
+
+
+f3 = h5py.File('max_sam_g_disso.hdf5')
+f3.create_dataset('ds',data=table_max_sam_g_disso)
 f3.close()
 
 
-f4 = h5py.File('max_sam_g_disso.hdf5')
-dset4 = f4.create_dataset('ds4',data=table_max_sam_g_disso)
-f4.close()
+##### ------------- end of the dissociation rate table ---------#####
 
 
 
 
-#---- build the formation cross section table ---
+####  ---------- build the formation cross section * V table -------- ######
 g_form = []		
-p_rel = np.exp(np.linspace(p_rel_min, p_rel_max, 101))  # for bottomonium
+p_rel = np.exp(np.linspace(p_rel_min, p_rel_max, N_pr+1))  # for bottomonium
 len_p = len(p_rel)
 
-X2, Y2 = np.meshgrid(p_rel,T)
-pT = np.array([X2.flatten(),Y2.flatten()]).T
+array_vTp = np.vstack(np.meshgrid(v,T,p_rel)).reshape(3,-1).T
+## Attention! index of p_rel changes first, then v's  and finally T's
+## the -1 in the reshape means the length of second axis is calculated accordingly
 
-#print pT
+#print array_vTp
+
 
 for i in range(len_T):
-	for j in range(len_p):
-		g_form.append( [fcros_1S(p_rel[j],T[i])*197.326**2] )  ### convert from MeV^-2 to fm^2 
-
+	for j in range(len_v):
+		for k in range(len_p):
+			g_form.append( [C1**3*fcros_1S(v[j],T[i],p_rel[k])] ) 
 g_form = np.array(g_form)
-table_g_form = np.append(pT,g_form,axis=1)
+table_g_form = np.append(array_vTp,g_form,axis=1)
 
 
 
 f2 = h5py.File('b_g_form.hdf5')
-dset2 = f2.create_dataset('ds2',data=table_g_form)
+dset2 = f2.create_dataset('ds',data=table_g_form)
 f2.close()
+
+
+####  ---------- end of formation cross section * V table -------- ######
 
 
 
 
 '''
 #####-----------------#####################
-#----- this part of code is to explore how to form a 3-D array in a useful way ----
+####----- this part of code is to explore how to form a 3-D array in a useful way ----
 #----- check how to extend arrays
 x = np.linspace(0.1,1.0,10)
 y = np.linspace(5, 50, 10)
@@ -205,32 +259,56 @@ print A
 
 
 '''
+### ------------- the following are for plots --------------####
+
 rate_1 = []
 rate_5 = []
 rate_9 = []
-fcros = []
-T = np.linspace(170.0, 450.0, 101)
+fcros0 = []
+fcros_1 = []
+fcros_5 = []
+fcros_9 = []
+T = np.linspace(100.0, 450.0, 101)
 p = np.linspace(60.0, 3500.0, 101)
 length = len(T)
 for i in range(length):
-	fcros.append(fcros_1S(p[i],500.0)*197.326**2)
-	#rate_1.append(drate_1S(0.1,T[i]))
-	#rate_5.append(drate_1S(0.5,T[i]))
-	#rate_9.append(drate_1S(0.9,T[i]))
+	rate_1.append(drate_1S(0.1,T[i]))
+	rate_5.append(drate_1S(0.5,T[i]))
+	rate_9.append(drate_1S(0.9,T[i]))
+	fcros0.append(C1**3*fcros_1S(0.1,T[i],1/a_B))
+	fcros_1.append(C1**3*fcros_1S(0.1,250.0,p[i]))
+	fcros_5.append(C1**3*fcros_1S(0.5,250.0,p[i]))
+	fcros_9.append(C1**3*fcros_1S(0.9,250.0,p[i]))
 
 
-plt.figure()
-plt.plot(p, fcros, linewidth=2.0, color='blue',label='$T=300.0$ MeV')
-#plt.plot(T, rate_1, linewidth=2.0, color='blue',label='$v=0.1$')
-#plt.plot(T, rate_5, linewidth=2.0, color='red',label='$v=0.5$')
-#plt.plot(T, rate_9, linewidth=2.0, color='green',label='$v=0.9$')
-#plt.xlim([0.001, 0.01])
-#plt.xlabel(r'$T(MeV)$', size=20)
-#plt.ylabel(r'$\Gamma^d_{1S}(MeV)$', size=20)
-plt.xscale('log')
+plt.figure(0)
+plt.plot(T, rate_1, linewidth=2.0, color='blue',label='$v=0.1$')
+plt.plot(T, rate_5, linewidth=2.0, color='red',label='$v=0.5$')
+plt.plot(T, rate_9, linewidth=2.0, color='green',label='$v=0.9$')
+plt.xlabel(r'$T(MeV)$', size=20)
+plt.ylabel(r'$\Gamma^d_{1S}(MeV)$', size=20)
 plt.legend(loc='upper left')
-#plt.savefig('1S_test.eps')
+plt.savefig('1S_gluo-decay.eps')
+plt.show()
+
+plt.figure(1)
+plt.plot(p, fcros_1, linewidth=2.0, color='blue',label='$v=0.1,T=250\ MeV$')
+plt.plot(p, fcros_5, linewidth=2.0, color='red',label='$v=0.5,T=250\ MeV$')
+plt.plot(p, fcros_9, linewidth=2.0, color='green',label='$v=0.9,T=250\ MeV$')
+#plt.xlim([0.001, 0.01])
+plt.xlabel(r'$p(MeV)$', size=20)
+plt.ylabel(r'$V\Gamma^f_{1S}(MeV\cdot fm^3)$', size=20)
+#plt.xscale('log')
+plt.legend(loc='upper right')
+plt.savefig('1S_gluo-form.eps')
+plt.show()
+
+
+plt.figure(0)
+plt.plot(T, fcros0, linewidth=2.0, color='blue',label='$p=1/a_B$')
+plt.xlabel(r'$T(MeV)$', size=20)
+plt.ylabel(r'$V\Gamma^f_{1S}(MeV\cdot fm^3)$', size=20)
+plt.legend(loc='upper left')
+plt.savefig('1S_gluo-form2.eps')
 plt.show()
 '''
-
-
