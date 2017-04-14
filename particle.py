@@ -22,7 +22,7 @@ class Particlelist:
     @id.setter
     def id(self, value):
         if type(value) != int:
-            raise ValueError("type must be integer")
+            raise ValueError("type (particle ID) must be integer")
         self._id = value
 
 #    def move(self, dt):
