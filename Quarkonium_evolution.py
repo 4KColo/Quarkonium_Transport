@@ -182,14 +182,14 @@ class QQbar_evol:
 		for i in range(len_Qbar):
 		#--- search pairs first ----
 			tree_Q = cKDTree(data = self.Qlist.x)
-			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r=1.7)	## the distance r = 1 fm can be changed
+			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r=1.0)	## the distance r = 1 fm can be changed
 			
 			for each in list:
 				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
 				
-				if min(evt_f.form_rate()*dt/C1, 1.0) > np.random.rand(1):
+				if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) > np.random.rand(1):
 					delete_Qbar.append(i)
-					print 'bang!'
+					#print 'bang!'
 					q_U1S, costhetaU, phiU = evt_f.sample_final() 	## sample U1S momentum
 					sinthetaU = np.array(1.0-costhetaU**2)
 					# get the 3-component of U1S momentum, where v = z axis
