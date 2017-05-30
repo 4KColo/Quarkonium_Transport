@@ -24,7 +24,7 @@ a_B = 2.0/(alpha_s*C_F*M)
 E_1S = alpha_s*C_F/(2.0*a_B)  # here is magnitude, true value is its negative
 C1 = 197.327				  # 197 MeV*fm = 1
 
-v_min = 0.01
+v_min = 0.0
 v_max = 0.99
 T_min = 150.0
 T_max = 500.0
@@ -33,7 +33,7 @@ q_max = 10*E_1S+0.01
 p_rel_min = 4.0 #ln value of p_rel min and max, used in the formation cross section
 p_rel_max = 8.6
 
-N_v = 49.0   # this is the number of spacings, real number is N+1
+N_v = 99.0   # this is the number of spacings, real number is N+1
 N_T = 100.0
 N_q = 100.0
 N_pr = 100.0
@@ -73,15 +73,22 @@ def fac1(z):
 #---- decay rate of 1S in the medium frame, v = c.o.m. velocity of quarkonium
 #---- T is the medium temperature at the position of quarkonium
 def drate_1S(v,T):
-	gamma = 1.0/np.sqrt(1.0-v**2)
-	I = si.quad(lambda q: q*dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ), E_1S, 100*E_1S )[0]
-	return I * T / (4.0*3.1416**2*v*gamma**2)
+	if v == 0.0:
+		I = si.quad(lambda q: q**2*dcros_1S(q)/(np.exp(q/T)-1.0), E_1S, 100*E_1S )[0]
+		return I / (2.0*np.pi**2)
+	else:
+		gamma = 1.0/np.sqrt(1.0-v**2)
+		I = si.quad(lambda q: q*dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ), E_1S, 100*E_1S )[0]
+		return I * T / (4.0*3.1416**2*v*gamma**2)
 
 
 #---- integrand of dq, used in the initial state sampling -----
 def initsam(v,T,q):
-	gamma = 1.0/np.sqrt(1.0-v**2)
-	return dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ) * T / (4.0*3.1416**2*v*gamma**2)
+	if v == 0:
+		return q**2*dcros_1S(q)/(np.exp(q/T)-1.0) / (2.0*np.pi**2)
+	else:
+		gamma = 1.0/np.sqrt(1.0-v**2)
+		return q*dcros_1S(q)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) ) * T / (4.0*3.1416**2*v*gamma**2)
 
 
 ### ------------------------ end of gluo-dissociation -------------------- ###
@@ -91,10 +98,13 @@ def initsam(v,T,q):
 ### ------- formation cross section times relative velocity in the QQbar CM frame ------
 #------ p is the relative momentum between the QQbar in the QQbar CM frame ------
 def fcros_1S(v, T, p):
-	gamma = 1.0/np.sqrt(1.0-v**2)
 	q = p**2/M + E_1S
-	angle_part = 2.0 + T/(gamma*q*v)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) )
-	return 2.0*alpha_s*C_F/3.0*q**3*matrix_1S(p)*angle_part
+	if v == 0.0:
+		return 4.0*alpha_s*C_F/3.0*( 1.0+1.0/(np.exp(q/T)-1.0) )*q**3*matrix_1S(p)
+	else:
+		gamma = 1.0/np.sqrt(1.0-v**2)
+		angle_part = 2.0 + T/(gamma*q*v)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) )
+		return 2.0*alpha_s*C_F/3.0*q**3*matrix_1S(p)*angle_part
 
 
 
