@@ -14,14 +14,14 @@ M_1S = M*2.0 - E_1S  		  # mass of Upsilon(1S)
 C1 = 197.327				  # 197 MeV*fm = 1
 
 
-v_min = 0.01
+v_min = 0.0
 v_max = 0.99
 T_min = 150.0
 T_max = 500.0
 q_min = E_1S+0.01 # for sample initial gluon in the gluo-dissociation
 q_max = 10*E_1S+0.01
 
-N_v = 49.0
+N_v = 99.0
 N_T = 100.0
 N_q = 100.0
 
@@ -92,10 +92,10 @@ class QQbar_decay:
 #### here q is the boosted value from the sample_init method
 ####-------------- q must be larger than E_1S !!!!! -----------
 #### returns need to be boosted back to the hydro cell frame 
-		theta = rd.uniform(-np.pi,np.pi)
+		x = rd.uniform(-1.0, 1.0)	#cos(theta) is evenly distributed
 		p_rel = np.sqrt( M*(q-E_1S) )
 		phi = rd.uniform(0.0, 2.0*np.pi)
-		return [p_rel, np.cos(theta), phi]
+		return [p_rel, x, phi]
 		### remember that one Q has p_rel/2 the other has -p_rel/2
 	
 	

@@ -14,9 +14,9 @@ M_1S = M*2.0 - E_1S  		  # mass of Upsilon(1S)
 C1 = 197.327				  # 197 MeV*fm = 1
 
 
-v_min = 0.01
+v_min = 0.0
 v_max = 0.99
-N_v = 49.0
+N_v = 99.0
 dv = (v_max-v_min)/N_v
 
 T_min = 150.0
@@ -47,14 +47,17 @@ def lorentz(p4, v):
 	if len(v) !=3:
 		raise ValueError('second argument of lorentz transformation must be a 3-vector')
 	v_sq = v[0]**2+v[1]**2+v[2]**2
-	gamma = 1.0/np.sqrt(1.0-v_sq)
-	vdotp = v[0]*p4[1]+v[1]*p4[2]+v[2]*p4[3]
-	E = gamma*( p4[0] - vdotp )
-	px = -gamma*v[0]*p4[0] + p4[1] +(gamma-1.0)*v[0]*vdotp/v_sq
-	py = -gamma*v[1]*p4[0] + p4[2] +(gamma-1.0)*v[1]*vdotp/v_sq
-	pz = -gamma*v[2]*p4[0] + p4[3] +(gamma-1.0)*v[2]*vdotp/v_sq
-	return np.array([px,py,pz])
-	#return [E,px,py,pz]
+	if v_sq == 0.0:
+		return np.array([p4[1],p4[2],p4[3]])
+	else:
+		gamma = 1.0/np.sqrt(1.0-v_sq)
+		vdotp = v[0]*p4[1]+v[1]*p4[2]+v[2]*p4[3]
+		E = gamma*( p4[0] - vdotp )
+		px = -gamma*v[0]*p4[0] + p4[1] +(gamma-1.0)*v[0]*vdotp/v_sq
+		py = -gamma*v[1]*p4[0] + p4[2] +(gamma-1.0)*v[1]*vdotp/v_sq
+		pz = -gamma*v[2]*p4[0] + p4[3] +(gamma-1.0)*v[2]*vdotp/v_sq
+		return np.array([px,py,pz])
+		#return [E,px,py,pz]
 
 ####------ end of lorentz transformation function -----------
 
@@ -73,6 +76,7 @@ class QQbar_form:
 		p_comsqd = np.sum(self.p_com**2)
 		self.r = x1 - x2
 		self.R = 0.5*( x1 + x2 )
+		self.rdotp = self.r[0]*(p1[0]-p2[0]) + self.r[1]*(p1[1]-p2[1]) + self.r[2]*(p1[2]-p2[2])
 		
 		self.T = temperature
 		self.ind_T = int((self.T-T_min)/dT)				#index of T
@@ -99,6 +103,7 @@ class QQbar_form:
 	def form_rate(self):
 	# give the recombination rate based on v, T and p_rel
 		vol = np.abs(self.r[0]*self.r[1]*self.r[2])
+		#return 0.0 
 		return T_form[self.ind_form][3]/vol
 
 		

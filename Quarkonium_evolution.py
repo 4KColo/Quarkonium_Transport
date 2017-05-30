@@ -27,14 +27,18 @@ def lorentz(p4, v):
 	if len(v) !=3:
 		raise ValueError('second argument of lorentz transformation must be a 3-vector')
 	v_sq = v[0]**2+v[1]**2+v[2]**2
-	gamma = 1.0/np.sqrt(1.0-v_sq)
-	vdotp = v[0]*p4[1]+v[1]*p4[2]+v[2]*p4[3]
-	E = gamma*( p4[0] - vdotp )
-	px = -gamma*v[0]*p4[0] + p4[1] +(gamma-1.0)*v[0]*vdotp/v_sq
-	py = -gamma*v[1]*p4[0] + p4[2] +(gamma-1.0)*v[1]*vdotp/v_sq
-	pz = -gamma*v[2]*p4[0] + p4[3] +(gamma-1.0)*v[2]*vdotp/v_sq
-	return np.array([px,py,pz])
-	#return [E,px,py,pz]
+	if v_sq == 0.0:
+		return np.array([p4[1],p4[2],p4[3]])
+	else:
+		gamma = 1.0/np.sqrt(1.0-v_sq)
+		vdotp = v[0]*p4[1]+v[1]*p4[2]+v[2]*p4[3]
+		E = gamma*( p4[0] - vdotp )
+		px = -gamma*v[0]*p4[0] + p4[1] +(gamma-1.0)*v[0]*vdotp/v_sq
+		py = -gamma*v[1]*p4[0] + p4[2] +(gamma-1.0)*v[1]*vdotp/v_sq
+		pz = -gamma*v[2]*p4[0] + p4[3] +(gamma-1.0)*v[2]*vdotp/v_sq
+		return np.array([px,py,pz])
+		#return [E,px,py,pz]
+		
 
 ####------ end of lorentz transformation function -----------
 
@@ -49,6 +53,7 @@ def rotation(vec, theta, phi):
 	v2 = np.cos(theta)*np.sin(phi)*vec[0] + np.cos(phi)*vec[1] + np.sin(theta)*np.sin(phi)*vec[2]
 	v3 = -np.sin(theta)*vec[0] + np.cos(theta)*vec[2]
 	return np.array([v1,v2,v3])
+	#return vec
 
 
 ####------ end of rotation matrix ------------------------
@@ -60,7 +65,11 @@ def angle(vec):
 	if len(vec) !=3:
 		raise ValueError('first argument of angle must be a 3-vector')
 	len_vec = np.sqrt(np.sum(np.array(vec)**2))
-	theta = np.arccos(vec[2]/len_vec)
+	
+	if len_vec == 0.0:
+		theta = 0.0
+	else:
+		theta = np.arccos(vec[2]/len_vec)
 	if vec[0] > 0:
 		phi = np.arctan(vec[1]/vec[0])
 	elif vec[0] == 0:
@@ -106,7 +115,9 @@ class QQbar_evol:
 			self.Qlist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_Q)])
 			self.Qbarlist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_Q)])
 			self.U1Slist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_U1S)])
-
+			# the following one is used in test of decay rates
+			#self.U1Slist.p = np.array([ [0.0, 0.0, 10000.0] for i in range(N_U1S)])
+			
 #####----- evolution function --------
 	def run(self, dt = 0.04):		#--- time step is universal since we include recombination
 	
@@ -187,7 +198,7 @@ class QQbar_evol:
 			for each in list:
 				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
 				
-				if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) > np.random.rand(1):
+				if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) > np.random.rand(1) and evt_f.rdotp < 0.0:
 					delete_Qbar.append(i)
 					#print 'bang!'
 					q_U1S, costhetaU, phiU = evt_f.sample_final() 	## sample U1S momentum
@@ -208,8 +219,13 @@ class QQbar_evol:
 					self.Qlist.x = np.delete(self.Qlist.x, each, axis=0)
 					self.Qlist.p = np.delete(self.Qlist.p, each, axis=0)
 					## DO NOT change the Qbarlist here, STILL inside the LOOP of Qbarlist !!!
-					self.U1Slist.x = np.append(self.U1Slist.x, [position_U1S], axis=0)
-					self.U1Slist.p = np.append(self.U1Slist.p, [momentum_U1S], axis=0)
+					
+					if len_U1S == 0:
+						self.U1Slist.x = np.array([position_U1S])
+						self.U1Slist.p = np.array([momentum_U1S])
+					else:
+						self.U1Slist.x = np.append(self.U1Slist.x, [position_U1S], axis=0)
+						self.U1Slist.p = np.append(self.U1Slist.p, [momentum_U1S], axis=0)
 					
 					break
 					
@@ -230,10 +246,17 @@ class QQbar_evol:
 		### if there is at least quarkonium decays, we need to update all the three lists
 			self.U1Slist.x = np.delete(self.U1Slist.x, delete_U1S, axis=0) # delete along the axis = 0
 			self.U1Slist.p = np.delete(self.U1Slist.p, delete_U1S, axis=0)
-			self.Qlist.x = np.append(self.Qlist.x, add_xQ, axis=0)
-			self.Qlist.p = np.append(self.Qlist.p, add_pQ, axis=0)
-			self.Qbarlist.x = np.append(self.Qbarlist.x, add_xQ, axis=0)
-			self.Qbarlist.p = np.append(self.Qbarlist.p, add_pQbar, axis=0)
+			
+			if len_Qbar == 0:
+				self.Qlist.x = np.array(add_xQ)
+				self.Qlist.p = np.array(add_pQ)
+				self.Qbarlist.x = np.array(add_xQ)
+				self.Qbarlist.p = np.array(add_pQbar)
+			else:
+				self.Qlist.x = np.append(self.Qlist.x, add_xQ, axis=0)
+				self.Qlist.p = np.append(self.Qlist.p, add_pQ, axis=0)
+				self.Qbarlist.x = np.append(self.Qbarlist.x, add_xQ, axis=0)
+				self.Qbarlist.p = np.append(self.Qbarlist.p, add_pQbar, axis=0)
 			
 		### --------------- end of the list updates of decay --------------------
 			
