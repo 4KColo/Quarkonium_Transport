@@ -77,6 +77,9 @@ class QQbar_form:
 		self.r = x1 - x2
 		self.R = 0.5*( x1 + x2 )
 		self.rdotp = self.r[0]*(p1[0]-p2[0]) + self.r[1]*(p1[1]-p2[1]) + self.r[2]*(p1[2]-p2[2])
+		#next step check: they must have passed each other
+		r_next = self.r + p1/np.sqrt(np.sum(p1**2)+M**2) - p2/np.sqrt(np.sum(p2**2)+M**2)
+		self.rdotp_next = r_next[0]*(p1[0]-p2[0]) + r_next[1]*(p1[1]-p2[1]) + r_next[2]*(p1[2]-p2[2])
 		
 		self.T = temperature
 		self.ind_T = int((self.T-T_min)/dT)				#index of T
@@ -115,7 +118,7 @@ class QQbar_form:
 			x_sam = rd.uniform(0.0, 1.0/(1.0-np.exp(-q_g/np.sqrt(1.0-self.v**2)*(1.0-self.v)/self.T)) )
 			f_x = 1.0/(1.0-np.exp(-q_g/np.sqrt(1.0-self.v**2)*(1.0+x*self.v)/self.T) )
 
-			if x_sam < f_x:
+			if x_sam <= f_x:
 				break
 
 		phi = rd.uniform(0.0, 2.0*np.pi)

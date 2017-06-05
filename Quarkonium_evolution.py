@@ -93,7 +93,7 @@ class QQbar_evol:
 
 
 #---- initialize the Q, Qbar and Quarkonium -- currently we only study Upsilon(1S)
-	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, Pmax = 15000.0):
+	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, Pmax = 10000.0):
 		self.Lmax = 10.0
 #---- first determine medium type and then initialize
 		if self.type == 'static':
@@ -122,16 +122,27 @@ class QQbar_evol:
 	def run(self, dt = 0.04):		#--- time step is universal since we include recombination
 	
 		### --------- free stream Q, Qbar, U1S first ------------
-		self.Qlist.x = (self.Qlist.x + dt*self.Qlist.p/np.sqrt(self.Qlist.p**2+M**2) )%self.Lmax
-		self.Qbarlist.x = (self.Qbarlist.x + dt*self.Qbarlist.p/np.sqrt(self.Qbarlist.p**2+M**2) )%self.Lmax
-		self.U1Slist.x = (self.U1Slist.x + dt*self.U1Slist.p/np.sqrt(self.U1Slist.p**2+M**2) )%self.Lmax
+		len_U1S = len(self.U1Slist.x)
+		len_Qbar = len(self.Qbarlist.x)		#notice len_Qbar = len_Q
+		
+		if len_U1S != 0:
+			v_U1S = np.array( [self.U1Slist.p[i]/np.sqrt(np.sum(self.U1Slist.p[i]**2)+M_1S**2) for i in range(len_U1S)] )
+			self.U1Slist.x = (self.U1Slist.x + dt*v_U1S )%self.Lmax
+			
+		if len_Qbar != 0:
+			v_Q = np.array( [self.Qlist.p[i]/np.sqrt(np.sum(self.Qlist.p[i]**2)+M**2) for i in range(len_Qbar)] )
+			v_Qbar = np.array( [self.Qbarlist.p[i]/np.sqrt(np.sum(self.Qbarlist.p[i]**2)+M**2) for i in range(len_Qbar)] )
+			
+			self.Qlist.x = (self.Qlist.x + dt*v_Q )%self.Lmax
+			self.Qbarlist.x = (self.Qbarlist.x + dt*v_Qbar )%self.Lmax
+			
 		### ----------- end of free stream ---------------------
 		
 		
 		### --------then consider the decay of U1S-------------
 		### -------- start here -------------------------------
 		
-		len_U1S = len(self.U1Slist.p)
+		
 		delete_U1S = []
 		add_pQ = []
 		add_pQbar = []
@@ -141,7 +152,7 @@ class QQbar_evol:
 			evt = QQbar_decay(com_momentum = self.U1Slist.p[i], temperature = self.T) #call the decay class
 			
 			# if the decay happens
-			if evt.decay_rate()*dt/C1 > np.random.rand(1):
+			if evt.decay_rate()*dt/C1 >= np.random.rand(1):
 				delete_U1S.append(i) # store the indexes that should be deleted later
 
 			#else: nothing happens	
@@ -187,18 +198,19 @@ class QQbar_evol:
 		
 		
 		###--------------- recombination part ----------------------
-		len_Qbar = len(self.Qbarlist.x)
+		
 		delete_Qbar = []
 
 		for i in range(len_Qbar):
 		#--- search pairs first ----
 			tree_Q = cKDTree(data = self.Qlist.x)
-			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r=1.0)	## the distance r = 1 fm can be changed
+			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = 0.8)	## the distance r = 1 fm can be changed
 			
 			for each in list:
 				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
 				
-				if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) > np.random.rand(1) and evt_f.rdotp < 0.0:
+				#if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) >= np.random.rand(1) and evt_f.rdotp < 0.0:
+				if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) >= np.random.rand(1) and evt_f.rdotp < 0.0 and evt_f.rdotp_next >= 0.0:
 					delete_Qbar.append(i)
 					#print 'bang!'
 					q_U1S, costhetaU, phiU = evt_f.sample_final() 	## sample U1S momentum

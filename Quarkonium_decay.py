@@ -45,6 +45,23 @@ f_decay.close()
 f_sam.close()
 f_maxsam.close()
 
+def angular_sample(A, v, y):
+# we use the inverse transform method to sample the incoming gluon angles
+# here A = q/T, v is the velocity of quarkonium, y is a random number [0,1]
+	if v == 0.0:
+		return 2.0*y - 1.0
+	elif y == 1.0:
+		return 1.0
+	else:
+		gamma_v = 1.0/np.sqrt(1.0-v**2)
+		B = A*gamma_v
+		C = y*np.log(1.0-np.exp(-B*(1.0+v))) + (1.0-y)*np.log(1.0-np.exp(-B*(1.0-v)))
+		if C == 0.0:
+			return 2.0*y - 1.0
+		else:
+			return (-np.log(1.0-np.exp(C))/B-1.0 )/v
+
+
 
 class QQbar_decay:
 	def __init__(self, com_momentum, temperature):
@@ -70,15 +87,13 @@ class QQbar_decay:
 			q = rd.uniform(q_min, q_max)
 			f_q = rd.uniform(0.0, maxsam)
 			index = int( (q-q_min)/dq ) + self.ind_v*(N_q+1.0) + self.ind_T*(N_q+1.0)*(N_v+1.0)
-			if f_q < T_sam[index][3]:
+			if f_q <= T_sam[index][3]:
 				break
-		while True:
-			x = rd.uniform(-1.0, 1.0)  #sample angular part: cos(angle)
-			ang_sam = rd.uniform(0.0, 1.0/( np.exp(q/np.sqrt(1.0-self.v**2)/self.T*(1.0-self.v))-1.0 ) )
-			### sample the angular distribution according to the max value at x = cos() = -1
-			f_x = 1.0/( np.exp(q/np.sqrt(1.0-self.v**2)/self.T*(1.0+x*self.v))-1.0 )
-			if ang_sam < f_x:
-				break
+		
+		####--- then sample x = cos(theta) and phi
+		y = rd.uniform(0.0,1.0)
+		x = angular_sample(q/self.T, self.v, y)
+		
 		phi = rd.uniform(0.0, 2.0*np.pi)
 			
 		return [q, x, phi]
