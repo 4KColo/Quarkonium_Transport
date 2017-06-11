@@ -5,6 +5,7 @@ import h5py
 
 alpha_s = 0.3 # for bottomonium
 N_C = 3.0
+T_F = 0.5
 M = 4650.0 # MeV b-quark
 rho_c = 1.0/(N_C**2-1.0)
 C_F = 4.0/3.0
@@ -24,7 +25,7 @@ T_max = 500.0
 N_T = 100.0
 dT = (T_max-T_min)/N_T
 
-p_rel_min = 4.0 #ln value of p_rel min and max, used in the formation cross section
+p_rel_min = 4.0 #ln value of log(p_rel) min and max, used in the formation cross section
 p_rel_max = 8.6
 N_pr = 100.0
 dp_r = (p_rel_max - p_rel_min)/N_pr
@@ -64,6 +65,19 @@ def lorentz(p4, v):
 
 
 
+####------ define heavy Q distribution used in recombination ----####
+def dist_heavyQ(x):
+	if len(x) != 3:
+		raise ValueError('the argument in the heavy Q distribution function has to be 3-vector')
+	x_sqrd = np.sum(x**2)
+	radius = a_B*C1
+	return np.exp(-x_sqrd/(2.0*radius**2))/(np.sqrt(2.0*np.pi)*radius)**3
+
+
+####----------- end of heavy Q distribution function ----------#####
+
+
+
 class QQbar_form:
 	def __init__(self, x1, p1, x2, p2, temperature):
 	# p1, p2, x1, x2 are all in the medium frame
@@ -72,31 +86,33 @@ class QQbar_form:
 		x1 = np.array(x1)
 		x2 = np.array(x2)
 	## assume all vectors are numpy array
-		self.p_com = 0.5*( p1 + p2 )	# com momentum in medium frame
+		self.p_com =  p1 + p2 	# com momentum in medium frame, corresponding to mass = 2M
+		# if one uses p_com = (p1 + p2)/2, then should use mass = M
 		p_comsqd = np.sum(self.p_com**2)
 		self.r = x1 - x2
 		self.R = 0.5*( x1 + x2 )
 		self.rdotp = self.r[0]*(p1[0]-p2[0]) + self.r[1]*(p1[1]-p2[1]) + self.r[2]*(p1[2]-p2[2])
 		#next step check: they must have passed each other
-		r_next = self.r + p1/np.sqrt(np.sum(p1**2)+M**2) - p2/np.sqrt(np.sum(p2**2)+M**2)
-		self.rdotp_next = r_next[0]*(p1[0]-p2[0]) + r_next[1]*(p1[1]-p2[1]) + r_next[2]*(p1[2]-p2[2])
+		#r_next = self.r + p1/np.sqrt(np.sum(p1**2)+M**2) - p2/np.sqrt(np.sum(p2**2)+M**2)
+		#self.rdotp_next = r_next[0]*(p1[0]-p2[0]) + r_next[1]*(p1[1]-p2[1]) + r_next[2]*(p1[2]-p2[2])
 		
 		self.T = temperature
 		self.ind_T = int((self.T-T_min)/dT)				#index of T
 		
-		self.v = np.sqrt(p_comsqd)/np.sqrt(p_comsqd+(2.0*M)**2)
-		self.v3 = self.p_com/np.sqrt(p_comsqd+(2.0*M)**2)
+		self.v = np.sqrt(p_comsqd)/np.sqrt(p_comsqd + (2.0*M)**2)
+		self.v3 = self.p_com/np.sqrt(p_comsqd + (2.0*M)**2)
 		self.ind_v = int((self.v - v_min)/dv)				#index of v
 		
 		p1_cm = lorentz([np.sqrt(np.sum(p1**2)+M**2),p1[0],p1[1],p1[2]], self.v3)
 		p2_cm = lorentz([np.sqrt(np.sum(p2**2)+M**2),p2[0],p2[1],p2[2]], self.v3)
 		
-		self.p_rel = p1_cm - p2_cm
+		self.p_rel = (p1_cm - p2_cm)/2.0
 		self.pr = np.sqrt( np.sum(self.p_rel**2) )
+		
 		if self.pr <= np.exp(p_rel_min):
 			self.ind_pr = 0
 		elif self.pr >= np.exp(p_rel_max):
-			self.ind_pr = int(N_pr+1)
+			self.ind_pr = int(N_pr)
 		else:
 			pr_ln = np.log( self.pr )
 			self.ind_pr = int((pr_ln - p_rel_min)/dp_r)		#index of pr
@@ -105,9 +121,9 @@ class QQbar_form:
 		
 	def form_rate(self):
 	# give the recombination rate based on v, T and p_rel
-		vol = np.abs(self.r[0]*self.r[1]*self.r[2])
-		#return 0.0 
-		return T_form[self.ind_form][3]/vol
+		#vol = np.abs(self.r[0]*self.r[1]*self.r[2])	# use 1/V as distribution function
+		#return T_form[self.ind_form][3]/vol		# this is a bad choice since r[i] may be 0, i = x,y,z
+		return T_form[self.ind_form][3] * dist_heavyQ(self.r)
 
 		
 	def sample_final(self): # if the recombination occurs

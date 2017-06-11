@@ -24,6 +24,7 @@ def Inr_p(m, T):	#non-relativistic energy
 alpha_s = 0.3 # for bottomonium
 #alpha_s = 0.55 # for charmonium
 N_C = 3.0
+T_F = 0.5
 M = 4650.0 # MeV b-quark
 #M = 1270.0  # MeV c-quark
 rho_c = 1.0/(N_C**2-1.0)
@@ -125,10 +126,10 @@ plt.show()
 
 
 #### ------------ multiple runs averaged and compare ---------------- ####
-N_ave = 49		# #of parallel runnings
-T = 250.0		
-N_step = 7500	
-dt = 0.04
+N_ave = 500		# #of parallel runnings
+T = 450.0		
+N_step = 8000	
+dt = 0.05
 tmax = N_step*dt
 t = np.linspace(0.0, tmax, N_step+1)
 Nq = 50		# initial number of Q or Qbar
@@ -143,13 +144,19 @@ for i in range(N_ave):
 	events.append(QQbar_evol('static',temperature = T))
 	events[i].initialize(N_Q = Nq, N_U1S = N1s)
 
+
 for i in range(N_step+1):
 	len_u1s = 0.0
+	# to store E, px, py, pz
+	px = []
+	py = []
+	pz = []
 	for j in range(N_ave):
 		len_u1s += len(events[j].U1Slist.x)
-		events[j].run()
+		events[j].run()	
 	N1s_t.append(len_u1s/N_ave)
 	Nq_t.append(Nq-len_u1s/N_ave)
+
 
 Nq_t = np.array(Nq_t)
 N1s_t = np.array(N1s_t)
@@ -171,14 +178,14 @@ plt.figure(1)
 #plt.plot(t, t*0.0+r_Q, linewidth = 2.0, color='blue', label=r'$Q$ or $\bar{Q}$ prediction')
 #plt.plot(t, t*0.0+r_Q_nr, linewidth = 2.0, color='purple', linestyle='--', label=r'$Q$ or $\bar{Q}$ NR prediction')
 plt.plot(t, N1s_r, linewidth = 2.0, color='red', label = r'$\Upsilon(1S)$ simulation')
-plt.plot(t, t*0.0+r_U1s, linewidth = 2.0, color='green', label = r'$\Upsilon(1S)$ prediction')
-plt.plot(t, t*0.0+r_U1s_nr, linewidth = 2.0, color='orange', linestyle='--', label=r'$Q$ or $\bar{Q}$ NR prediction')
+#plt.plot(t, t*0.0+r_U1s, linewidth = 2.0, color='green', label = r'$\Upsilon(1S)$ prediction')
+#plt.plot(t, t*0.0+r_U1s_nr, linewidth = 2.0, color='orange', linestyle='--', label=r'$\Upsilon(1S)$ NR prediction')
 plt.xlabel('$t$ (fm)', size = 20)
 plt.ylabel(r'$N/N_{tot}$', size = 20)
 #plt.ylim([0.0, 1.0])
 #plt.yscale('log')
 plt.legend(loc='best')
-plt.savefig('test_plot/detban_ave_T='+str(T)+'Nb='+str(Nq)+'Nu='+str(N1s)+'.eps')
+plt.savefig('test_plot/detban_newave_T='+str(T)+'Nb='+str(Nq)+'Nu='+str(N1s)+'.eps')
 plt.show()
 
 

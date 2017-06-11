@@ -5,6 +5,7 @@ import h5py
 
 alpha_s = 0.3 # for bottomonium
 N_C = 3.0
+T_F = 0.5
 M = 4650.0 # MeV b-quark
 rho_c = 1.0/(N_C**2-1.0)
 C_F = 4.0/3.0
@@ -86,7 +87,7 @@ class QQbar_decay:
 		while True:
 			q = rd.uniform(q_min, q_max)
 			f_q = rd.uniform(0.0, maxsam)
-			index = int( (q-q_min)/dq ) + self.ind_v*(N_q+1.0) + self.ind_T*(N_q+1.0)*(N_v+1.0)
+			index = int( int((q-q_min)/dq)  + self.ind_v*(N_q+1.0) + self.ind_T*(N_q+1.0)*(N_v+1.0) )
 			if f_q <= T_sam[index][3]:
 				break
 		
@@ -111,7 +112,7 @@ class QQbar_decay:
 		p_rel = np.sqrt( M*(q-E_1S) )
 		phi = rd.uniform(0.0, 2.0*np.pi)
 		return [p_rel, x, phi]
-		### remember that one Q has p_rel/2 the other has -p_rel/2
+		### remember that one Q has p_rel the other has -p_rel
 	
 	
 	

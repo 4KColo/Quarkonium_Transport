@@ -16,12 +16,14 @@ import h5py
 alpha_s = 0.3 # for bottomonium
 #alpha_s = 0.55 # for charmonium
 N_C = 3.0
+T_F = 0.5
 M = 4650.0 # MeV b-quark
 #M = 1270.0  # MeV c-quark
 rho_c = 1.0/(N_C**2-1.0)
 C_F = 4.0/3.0
 a_B = 2.0/(alpha_s*C_F*M)
 E_1S = alpha_s*C_F/(2.0*a_B)  # here is magnitude, true value is its negative
+M_1S = M*2-E_1S
 C1 = 197.327				  # 197 MeV*fm = 1
 
 v_min = 0.0
@@ -97,20 +99,28 @@ def initsam(v,T,q):
 
 ### ------- formation cross section times relative velocity in the QQbar CM frame ------
 #------ p is the relative momentum between the QQbar in the QQbar CM frame ------
-def fcros_1S(v, T, p):
+#------ the formation rate is for a specific color index, no summation over octet color indexes -----
+def frateV_1S(v, T, p): 	# rate * Vol = sigma * v_rel
+	# 1/Vol = int dp f(p)
 	q = p**2/M + E_1S
 	if v == 0.0:
-		return 4.0*alpha_s*C_F/3.0*( 1.0+1.0/(np.exp(q/T)-1.0) )*q**3*matrix_1S(p)
+		return 4.0*alpha_s*T_F/N_C/3.0*( 1.0+1.0/(np.exp(q/T)-1.0) )*q**3*matrix_1S(p)
 	else:
 		gamma = 1.0/np.sqrt(1.0-v**2)
 		angle_part = 2.0 + T/(gamma*q*v)*( fac1(q*gamma*(1+v)/T)-fac1(q*gamma*(1-v)/T) )
-		return 2.0*alpha_s*C_F/3.0*q**3*matrix_1S(p)*angle_part
+		return 2.0*alpha_s*T_F/N_C/3.0*q**3*matrix_1S(p)*angle_part
 
 
+
+def fcros_1S(p):		# for v = 0, non-relativistic case
+	q = p**2/M + E_1S
+	transition_rate = 4.0*alpha_s*T_F/N_C/3.0*q**3*matrix_1S(p)
+	sigma = transition_rate/(2.0*p/M)
+	return sigma
 
 
 '''
-#---- moving frame factor
+##### ---- moving frame factor (NOT the one we want)
 #---- PAY ATTNENTION to how spence is defined in scipy.special
 def fac1(z):
 	return z*np.log(1.0-np.exp(-z))-ss.spence(1.0-np.exp(-z))
@@ -132,7 +142,7 @@ def initsam(v,T,q):
 
 #------ formation cross section times relative velocity in the QQbar CM frame ------
 #------ p is the relative momentum between the QQbar in the QQbar CM frame ------
-def fcros_1S(p, T):
+def frateV_1S(p, T):
 	q = p**2/M + E_1S
 	return 4.0*alpha_s*C_F/3.0*q**3/(1.0-np.exp(-q/T))*matrix_1S(p)
 '''
@@ -214,7 +224,7 @@ f3.close()
 
 
 
-####  ---------- build the formation cross section * V table -------- ######
+####  ---------- build the formation cross section * v_rel table -------- ######
 g_form = []		
 p_rel = np.exp(np.linspace(p_rel_min, p_rel_max, N_pr+1))  # for bottomonium
 len_p = len(p_rel)
@@ -229,7 +239,7 @@ array_vTp = np.vstack(np.meshgrid(v,T,p_rel)).reshape(3,-1).T
 for i in range(len_T):
 	for j in range(len_v):
 		for k in range(len_p):
-			g_form.append( [C1**3*fcros_1S(v[j],T[i],p_rel[k])] ) 
+			g_form.append( [C1**3*frateV_1S(v[j],T[i],p_rel[k])] ) 
 g_form = np.array(g_form)
 table_g_form = np.append(array_vTp,g_form,axis=1)
 
@@ -240,7 +250,7 @@ dset2 = f2.create_dataset('ds',data=table_g_form)
 f2.close()
 
 
-####  ---------- end of formation cross section * V table -------- ######
+####  ---------- end of formation cross section * v_rel table -------- ######
 
 
 
@@ -274,10 +284,10 @@ print A
 rate_1 = []
 rate_5 = []
 rate_9 = []
-fcros0 = []
-fcros_1 = []
-fcros_5 = []
-fcros_9 = []
+frateV0 = []
+frateV_1 = []
+frateV_5 = []
+frateV_9 = []
 T = np.linspace(100.0, 450.0, 101)
 p = np.linspace(60.0, 3500.0, 101)
 length = len(T)
@@ -285,10 +295,10 @@ for i in range(length):
 	rate_1.append(drate_1S(0.1,T[i]))
 	rate_5.append(drate_1S(0.5,T[i]))
 	rate_9.append(drate_1S(0.9,T[i]))
-	fcros0.append(C1**3*fcros_1S(0.1,T[i],1/a_B))
-	fcros_1.append(C1**3*fcros_1S(0.1,250.0,p[i]))
-	fcros_5.append(C1**3*fcros_1S(0.5,250.0,p[i]))
-	fcros_9.append(C1**3*fcros_1S(0.9,250.0,p[i]))
+	frateV0.append(C1**3*frateV_1S(0.1,T[i],1/a_B))
+	frateV_1.append(C1**3*frateV_1S(0.1,250.0,p[i]))
+	frateV_5.append(C1**3*frateV_1S(0.5,250.0,p[i]))
+	frateV_9.append(C1**3*frateV_1S(0.9,250.0,p[i]))
 
 
 plt.figure(0)
@@ -302,9 +312,9 @@ plt.savefig('1S_gluo-decay.eps')
 plt.show()
 
 plt.figure(1)
-plt.plot(p, fcros_1, linewidth=2.0, color='blue',label='$v=0.1,T=250\ MeV$')
-plt.plot(p, fcros_5, linewidth=2.0, color='red',label='$v=0.5,T=250\ MeV$')
-plt.plot(p, fcros_9, linewidth=2.0, color='green',label='$v=0.9,T=250\ MeV$')
+plt.plot(p, frateV_1, linewidth=2.0, color='blue',label='$v=0.1,T=250\ MeV$')
+plt.plot(p, frateV_5, linewidth=2.0, color='red',label='$v=0.5,T=250\ MeV$')
+plt.plot(p, frateV_9, linewidth=2.0, color='green',label='$v=0.9,T=250\ MeV$')
 #plt.xlim([0.001, 0.01])
 plt.xlabel(r'$p(MeV)$', size=20)
 plt.ylabel(r'$V\Gamma^f_{1S}(MeV\cdot fm^3)$', size=20)
@@ -314,11 +324,30 @@ plt.savefig('1S_gluo-form.eps')
 plt.show()
 
 
-plt.figure(0)
-plt.plot(T, fcros0, linewidth=2.0, color='blue',label='$p=1/a_B$')
+plt.figure(2)
+plt.plot(T, frateV0, linewidth=2.0, color='blue',label='$p=1/a_B$')
 plt.xlabel(r'$T(MeV)$', size=20)
 plt.ylabel(r'$V\Gamma^f_{1S}(MeV\cdot fm^3)$', size=20)
 plt.legend(loc='upper left')
 plt.savefig('1S_gluo-form2.eps')
 plt.show()
+'''
+
+
+'''
+### ------------ plot the formation cross section --------------- ###
+p = np.linspace(60.0, 3500.0, 101)
+len_p = len(p)
+fcros1 = []
+for i in range(len_p):
+	fcros1.append(fcros_1S(p[i])*C1**2)
+
+plt.figure(3)
+plt.plot(p, fcros1, linewidth = 2.0, color='black')
+plt.xlabel(r'$p(MeV)$', size=20)
+plt.ylabel(r'$\sigma^f_{1S}(fm^2)$', size=20)
+plt.savefig('1S_form_cross.eps')
+plt.show()
+
+### ------------ end of plot the formation cross section ----------- ###
 '''
