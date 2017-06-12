@@ -207,7 +207,7 @@ for j in range (len_T):
 T_test = np.linspace(150.0, 450.0, 4)
 len_T = len(T_test)
 N_ave = 1000		# #of parallel runnings		
-N_step = 3000	
+N_step = 3000
 dt = 0.04
 tmax = N_step*dt
 t = np.linspace(0.0, tmax, N_step+1)
@@ -242,6 +242,7 @@ plt.fill_between(T, formation_rate_b_down, formation_rate_b_up, color='blue')
 plt.errorbar(T_test, ratef_T, yerr = np.sqrt(ratef_var), color='black', fmt='o')
 plt.xlabel(r'$T(MeV)$', size = 20)
 plt.ylabel(r'$\bar{\Gamma^f_{1S}}(MeV)$', size = 20)
+plt.savefig('test_plot/test_recombineN_step='+str(N_step)+'N_event='+str(N_ave)+'.eps')
 plt.show()
 
 
