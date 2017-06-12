@@ -160,7 +160,7 @@ class QQbar_evol:
 
 
 
-#####----- evolution function -------- ######
+#####------------ evolution function -------------- #####
 	def run(self, dt = 0.04):		#--- time step is universal since we include recombination
 	
 		### --------- free stream Q, Qbar, U1S first ------------
@@ -385,11 +385,47 @@ class QQbar_evol:
 				self.Qbarlist.p = np.append(self.Qbarlist.p, add_pQbar, axis=0)
 			
 		### --------------- end of the list updates of decay --------------------
-			
-			
+##### ------------ end of evolution function ---------------#####	
 			
 			
 			
 
-
-
+##### -------- a test evolution function for recombination --------#####			
+	def testrun(self, dt = 0.04):		#--- time step is universal since we include recombination
+	
+		### --------- free stream Q, Qbar, U1S first ------------
+		len_U1S = len(self.U1Slist.x)
+		len_Qbar = len(self.Qbarlist.x)		#notice len_Qbar = len_Q
+		
+		if len_U1S != 0:
+			v_U1S = np.array( [self.U1Slist.p[i]/np.sqrt(np.sum(self.U1Slist.p[i]**2)+M_1S**2) for i in range(len_U1S)] )
+			self.U1Slist.x = (self.U1Slist.x + dt*v_U1S )%self.Lmax
+			
+		if len_Qbar != 0:
+			v_Q = np.array( [self.Qlist.p[i]/np.sqrt(np.sum(self.Qlist.p[i]**2)+M**2) for i in range(len_Qbar)] )
+			v_Qbar = np.array( [self.Qbarlist.p[i]/np.sqrt(np.sum(self.Qbarlist.p[i]**2)+M**2) for i in range(len_Qbar)] )
+			
+			self.Qlist.x = (self.Qlist.x + dt*v_Q )%self.Lmax
+			self.Qbarlist.x = (self.Qbarlist.x + dt*v_Qbar )%self.Lmax
+			
+		### ----------- end of free stream ---------------------
+		
+		total_rate_f = 0.0
+		### -------- next return the averaged recombination rate -------
+		for i in range(len_Qbar):
+		#--- search pairs first ----
+			tree_Q = cKDTree(data = self.Qlist.x)
+			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = 1.0)	## the distance r = 1 fm can be changed
+			
+			rate_f = []		# to store the formation rate from each pair
+			for each in list:
+				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
+				if evt_f.rdotp < 0.0:
+					rate_f.append(2.0*evt_f.form_rate())
+					# since only half position space contribute due to the xdotp<0
+					# normalization needs doubling the rate
+			len_ratef = len(rate_f)
+			if len_ratef != 0:
+				rate_f = np.array(rate_f)
+				total_rate_f += np.sum(rate_f)/len_ratef
+		return total_rate_f/len_Qbar
