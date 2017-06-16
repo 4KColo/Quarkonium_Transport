@@ -18,7 +18,7 @@ a_B = 2.0/(alpha_s*C_F*M)
 E_1S = alpha_s*C_F/(2.0*a_B)  # Upsilon(1S), here is magnitude, true value is its negative
 M_1S = M*2.0 - E_1S  		  # mass of Upsilon(1S)
 C1 = 197.327				  # 197 MeV*fm = 1
-
+R_search = 1.0				  # (fm), pair-search radius in the recombination
 
 
 ####----- define a function for Lorentz transformation ---------
@@ -119,10 +119,10 @@ def thermal_sample(temp, mass):
 
 class QQbar_evol:
 #---- input the medium_type when calling the class ----
-	def __init__(self, medium_type, temperature = 300.0):
+	def __init__(self, medium_type, temperature = 300.0, recombine = True):
 		self.type = medium_type		# for static type, the input temperature will be used
 		self.T = temperature
-
+		self.recombine = recombine
 
 #---- initialize the Q, Qbar and Quarkonium -- currently we only study Upsilon(1S)
 	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, Pmax = 5000.0):
@@ -150,7 +150,7 @@ class QQbar_evol:
 			#self.U1Slist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_U1S)])
 			
 			# the following is used in test of decay rates
-			#self.U1Slist.p = np.array([ [0.0, 0.0, 10000.0] for i in range(N_U1S)])
+			#self.U1Slist.p = np.array([ [5000.0, 0.0, 0.0] for i in range(N_U1S)])
 			#self.U1Slist.p = np.array([ [0.0, 0.0, 0.0] for i in range(N_U1S)])
 			
 			# thermal distribution of initial momenta
@@ -179,6 +179,7 @@ class QQbar_evol:
 			self.Qbarlist.x = (self.Qbarlist.x + dt*v_Qbar )%self.Lmax
 			
 		### ----------- end of free stream ---------------------
+		
 		
 		
 		### --------then consider the decay of U1S-------------
@@ -242,90 +243,192 @@ class QQbar_evol:
 		
 		
 		###--------------- recombination part (new) ----------------
+		if self.recombine == True:
+			delete_Qbar = []
 		
-		delete_Qbar = []
-		
-		for i in range(len_Qbar):
-		#--- search pairs first ----
-			tree_Q = cKDTree(data = self.Qlist.x)
-			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = 1.0)	## the distance r = 1 fm can be changed
-			
-			rate_f = []		# to store the formation rate from each pair
-			for each in list:
-				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
-				if evt_f.rdotp < 0.0:
-					rate_f.append(2.0*evt_f.form_rate())
-					# since only half position space contribute due to the xdotp<0
-					# normalization needs doubling the rate
-			
-			prob_f = 8.0/9.0*np.array(rate_f)*dt/C1
-			len_list = len(prob_f)
-			totalprob_f = np.sum(prob_f)
-
-			prob_random = np.random.rand(1)
-			if prob_random <= totalprob_f:
-				delete_Qbar.append(i)
-				a = 0.0
-				for j in range(len_list):
-					if a <= prob_random and prob_random <= a+prob_f[j]:
-						k = j
-						break
-					a += prob_f[j]
-					
-				evt_f = QQbar_form(self.Qlist.x[k], self.Qlist.p[k], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
-				q_U1S, costhetaU, phiU = evt_f.sample_final() 	## sample U1S momentum
-				sinthetaU = np.array(1.0-costhetaU**2)
-				# get the 3-component of U1S momentum, where v = z axis
-				tempmomentum_U = np.array([q_U1S*sinthetaU*np.cos(phiU), q_U1S*sinthetaU*np.sin(phiU), q_U1S*costhetaU])
-				E_U1S = np.sqrt( np.sum(tempmomentum_U**2)+M_1S**2 )
-					
-				# need to rotate the vector, v is not the z axis in medium frame
-				theta_rot, phi_rot = angle(evt_f.v3)
-				rotmomentum_U = rotation(tempmomentum_U, theta_rot, phi_rot)
-
-				#lorentz back to the medium frame
-				momentum_U1S = lorentz( np.append(E_U1S, rotmomentum_U), -evt_f.v3 )
-				position_U1S = evt_f.R
-					
-				# update the lists
-				self.Qlist.x = np.delete(self.Qlist.x, k, axis=0)
-				self.Qlist.p = np.delete(self.Qlist.p, k, axis=0)
-				## DO NOT change the Qbarlist here, STILL inside the LOOP of Qbarlist !!!
-					
-				if len_U1S == 0:
-					self.U1Slist.x = np.array([position_U1S])
-					self.U1Slist.p = np.array([momentum_U1S])
-				else:
-					self.U1Slist.x = np.append(self.U1Slist.x, [position_U1S], axis=0)
-					self.U1Slist.p = np.append(self.U1Slist.p, [momentum_U1S], axis=0)
-					
-							
-		# ----now update the Qbarlist from delete_Qbar ----
-		self.Qbarlist.x = np.delete(self.Qbarlist.x, delete_Qbar, axis=0)
-		self.Qbarlist.p = np.delete(self.Qbarlist.p, delete_Qbar, axis=0)
-		###--------------- end of recombination (new) ---------------------			
-		
-		
-		
-		'''
-		###--------------- recombination part (old) ----------------
-		
-		delete_Qbar = []
-
-		for i in range(len_Qbar):
-		#--- search pairs first ----
-			tree_Q = cKDTree(data = self.Qlist.x)
-			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = 1.0)	## the distance r = 1 fm can be changed
-			
-			for each in list:
-				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
+			for i in range(len_Qbar):
+				rate_f = []		# to store the formation rate from each pair
+				Qbar_x, Qbar_y, Qbar_z = self.Qbarlist.x[i]
+				a_low = R_search
+				a_upp = self.Lmax - R_search
+				lenQ_temp = len(self.Qlist.x)
 				
-				#if 8/9.0*min(evt_f.form_rate()*dt/C1/(4.0/3.0*np.pi*np.sum(evt_f.r**2)**1.5), 1.0) >= np.random.rand(1) and evt_f.rdotp < 0.0:
-				#if 8/9.0*min(evt_f.form_rate()*dt/C1/V_search, 1.0) >= np.random.rand(1):
-				if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) >= np.random.rand(1) and evt_f.rdotp < 0.0:
-				#if 8/9.0*min(evt_f.form_rate()*dt/C1, 1.0) >= np.random.rand(1) and evt_f.rdotp < 0.0 and evt_f.rdotp_next >= 0.0:
+				#--- search pairs first: determine the boundary condition and define KDtree ----
+				if a_low <= Qbar_x <= a_upp:
+					if a_low <= Qbar_y <= a_upp:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = self.Qlist.x
+							Q_plist = self.Qlist.p				
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], axis=0)
+							Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)		
+				
+						else:
+							Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], axis=0)
+							Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)
+			
+				
+					elif Qbar_y < a_low:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, -self.Lmax, 0.0], axis=0)
+							Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)		
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, -self.Lmax, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, -self.Lmax, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+	
+				
+					else:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, self.Lmax, 0.0], axis=0)
+							Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)		
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, self.Lmax, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, self.Lmax, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+	
+				
+				
+				elif Qbar_x < a_low:
+					if a_low <= Qbar_y <= a_upp:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], axis=0)
+							Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)				
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[-self.Lmax, 0.0, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[-self.Lmax, 0.0, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+			
+				
+					elif Qbar_y < a_low:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[-self.Lmax, -self.Lmax, 0.0]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, 0.0],
+							self.Qlist.x+[-self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, -self.Lmax, -self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, 0.0],
+							self.Qlist.x+[-self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, -self.Lmax, self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+	
+				
+					else:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[-self.Lmax, self.Lmax, 0.0]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, 0.0],
+							self.Qlist.x+[-self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, self.Lmax, -self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, 0.0],
+							self.Qlist.x+[-self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, self.Lmax, self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)						
+			
+			
+				else:
+					if a_low <= Qbar_y <= a_upp:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], axis=0)
+							Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)				
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[self.Lmax, 0.0, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[self.Lmax, 0.0, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+			
+				
+					elif Qbar_y < a_low:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[self.Lmax, -self.Lmax, 0.0]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, 0.0],
+							self.Qlist.x+[self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, -self.Lmax, -self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, 0.0],
+							self.Qlist.x+[self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, -self.Lmax, self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+	
+				
+					else:
+				
+						if a_low <= Qbar_z <= a_upp:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[self.Lmax, self.Lmax, 0.0]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+						elif Qbar_z < a_low:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, 0.0],
+							self.Qlist.x+[self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, self.Lmax, -self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, -self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+						else:
+							Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, 0.0],
+							self.Qlist.x+[self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, self.Lmax, self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, self.Lmax]), axis=0)
+							Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)						
+							
+							
+				tree_Q = cKDTree(data = Q_xlist)
+				list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = R_search)	## the distance r = 1 fm can be changed
+				
+				
+				for each in list:
+					evt_f = QQbar_form(Q_xlist[each], Q_plist[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
+					if evt_f.rdotp < 0.0:
+						rate_f.append(evt_f.form_rate())
+					else:
+						rate_f.append(0.0)
+						# since only half position space contribute due to the xdotp<0
+						# normalization needs doubling the rate, which is already included in the form_rate
+			
+				prob_random = np.random.rand(1)
+				prob_f = 8.0/9.0*np.array(rate_f)*dt/C1
+				len_list = len(prob_f)
+				totalprob_f = np.sum(prob_f)
+
+				if prob_random <= totalprob_f:
 					delete_Qbar.append(i)
-					#print 'bang!'
+					a = 0.0
+					for j in range(len_list):
+						if a <= prob_random <= a+prob_f[j]:
+							k = j
+							break
+						a += prob_f[j]
+					
+					evt_f = QQbar_form(Q_xlist[list[k]], Q_plist[list[k]], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
 					q_U1S, costhetaU, phiU = evt_f.sample_final() 	## sample U1S momentum
 					sinthetaU = np.array(1.0-costhetaU**2)
 					# get the 3-component of U1S momentum, where v = z axis
@@ -336,13 +439,13 @@ class QQbar_evol:
 					theta_rot, phi_rot = angle(evt_f.v3)
 					rotmomentum_U = rotation(tempmomentum_U, theta_rot, phi_rot)
 
-					#lorentz back to the medium frame
+					# lorentz back to the medium frame
 					momentum_U1S = lorentz( np.append(E_U1S, rotmomentum_U), -evt_f.v3 )
-					position_U1S = evt_f.R
+					position_U1S = evt_f.R%self.Lmax
 					
 					# update the lists
-					self.Qlist.x = np.delete(self.Qlist.x, each, axis=0)
-					self.Qlist.p = np.delete(self.Qlist.p, each, axis=0)
+					self.Qlist.x = np.delete(self.Qlist.x, list[k]%lenQ_temp, axis=0)
+					self.Qlist.p = np.delete(self.Qlist.p, list[k]%lenQ_temp, axis=0)
 					## DO NOT change the Qbarlist here, STILL inside the LOOP of Qbarlist !!!
 					
 					if len_U1S == 0:
@@ -352,14 +455,14 @@ class QQbar_evol:
 						self.U1Slist.x = np.append(self.U1Slist.x, [position_U1S], axis=0)
 						self.U1Slist.p = np.append(self.U1Slist.p, [momentum_U1S], axis=0)
 					
-					break
-					
-		# ----now update the Qbarlist from delete_Qbar ----
-		self.Qbarlist.x = np.delete(self.Qbarlist.x, delete_Qbar, axis=0)
-		self.Qbarlist.p = np.delete(self.Qbarlist.p, delete_Qbar, axis=0)
-		
-		###--------------- end of recombination (old) ---------------------
-		'''
+							
+			# ---- now update the Qbarlist from delete_Qbar ----
+			self.Qbarlist.x = np.delete(self.Qbarlist.x, delete_Qbar, axis=0)
+			self.Qbarlist.p = np.delete(self.Qbarlist.p, delete_Qbar, axis=0)
+			
+			
+		###--------------- end of recombination (new) ---------------------			
+
 		
 		
 		
@@ -373,7 +476,7 @@ class QQbar_evol:
 			self.U1Slist.x = np.delete(self.U1Slist.x, delete_U1S, axis=0) # delete along the axis = 0
 			self.U1Slist.p = np.delete(self.U1Slist.p, delete_U1S, axis=0)
 			
-			if len_Qbar == 0:
+			if len(self.Qbarlist.x) == 0:
 				self.Qlist.x = np.array(add_xQ)
 				self.Qlist.p = np.array(add_pQ)
 				self.Qbarlist.x = np.array(add_xQ)
@@ -392,11 +495,11 @@ class QQbar_evol:
 
 ##### -------- a test evolution function for recombination --------#####			
 	def testrun(self, dt = 0.04):		#--- time step is universal since we include recombination
-	
+		
 		### --------- free stream Q, Qbar, U1S first ------------
 		len_U1S = len(self.U1Slist.x)
 		len_Qbar = len(self.Qbarlist.x)		#notice len_Qbar = len_Q
-		
+		'''
 		if len_U1S != 0:
 			v_U1S = np.array( [self.U1Slist.p[i]/np.sqrt(np.sum(self.U1Slist.p[i]**2)+M_1S**2) for i in range(len_U1S)] )
 			self.U1Slist.x = (self.U1Slist.x + dt*v_U1S )%self.Lmax
@@ -407,25 +510,184 @@ class QQbar_evol:
 			
 			self.Qlist.x = (self.Qlist.x + dt*v_Q )%self.Lmax
 			self.Qbarlist.x = (self.Qbarlist.x + dt*v_Qbar )%self.Lmax
-			
+		'''	
 		### ----------- end of free stream ---------------------
 		
+		
 		total_rate_f = 0.0
+		count = 0.0
+		
 		### -------- next return the averaged recombination rate -------
 		for i in range(len_Qbar):
-		#--- search pairs first ----
-			tree_Q = cKDTree(data = self.Qlist.x)
-			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = 1.0)	## the distance r = 1 fm can be changed
-			
 			rate_f = []		# to store the formation rate from each pair
+			Qbar_x, Qbar_y, Qbar_z = self.Qbarlist.x[i]
+			a_low = R_search
+			a_upp = self.Lmax - R_search
+			
+		#--- search pairs first: determine the boundary condition and define KDtree ----
+			if a_low <= Qbar_x <= a_upp:
+				if a_low <= Qbar_y <= a_upp:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = self.Qlist.x
+						Q_plist = self.Qlist.p				
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], axis=0)
+						Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)		
+				
+					else:
+						Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], axis=0)
+						Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)
+			
+				
+				elif Qbar_y < a_low:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, -self.Lmax, 0.0], axis=0)
+						Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)		
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, -self.Lmax, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, -self.Lmax, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+	
+				
+				else:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[0.0, self.Lmax, 0.0], axis=0)
+						Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)		
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, self.Lmax, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, self.Lmax, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+	
+				
+				
+			elif Qbar_x < a_low:
+				if a_low <= Qbar_y <= a_upp:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], axis=0)
+						Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)				
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[-self.Lmax, 0.0, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[-self.Lmax, 0.0, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+			
+				
+				elif Qbar_y < a_low:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[-self.Lmax, -self.Lmax, 0.0]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, 0.0],
+						self.Qlist.x+[-self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, -self.Lmax, -self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, 0.0],
+						self.Qlist.x+[-self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, -self.Lmax, self.Lmax], self.Qlist.x+[-self.Lmax, -self.Lmax, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+	
+				
+				else:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[-self.Lmax, self.Lmax, 0.0]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, 0.0],
+						self.Qlist.x+[-self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, self.Lmax, -self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[-self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, 0.0],
+						self.Qlist.x+[-self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, self.Lmax, self.Lmax], self.Qlist.x+[-self.Lmax, self.Lmax, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)						
+			
+			
+			else:
+				if a_low <= Qbar_y <= a_upp:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.append(self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], axis=0)
+						Q_plist = np.append(self.Qlist.p, self.Qlist.p, axis=0)				
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[self.Lmax, 0.0, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[self.Lmax, 0.0, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)	
+			
+				
+				elif Qbar_y < a_low:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[self.Lmax, -self.Lmax, 0.0]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, 0.0],
+						self.Qlist.x+[self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, -self.Lmax, -self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, -self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, 0.0],
+						self.Qlist.x+[self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, -self.Lmax, self.Lmax], self.Qlist.x+[self.Lmax, -self.Lmax, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+	
+				
+				else:
+				
+					if a_low <= Qbar_z <= a_upp:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[self.Lmax, self.Lmax, 0.0]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)		
+				
+					elif Qbar_z < a_low:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, -self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, 0.0],
+						self.Qlist.x+[self.Lmax, 0.0, -self.Lmax], self.Qlist.x+[0.0, self.Lmax, -self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, -self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)				
+				
+					else:
+						Q_xlist = np.concatenate((self.Qlist.x, self.Qlist.x+[self.Lmax, 0.0, 0.0], self.Qlist.x+[0.0, self.Lmax, 0.0], self.Qlist.x+[0.0, 0.0, self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, 0.0],
+						self.Qlist.x+[self.Lmax, 0.0, self.Lmax], self.Qlist.x+[0.0, self.Lmax, self.Lmax], self.Qlist.x+[self.Lmax, self.Lmax, self.Lmax]), axis=0)
+						Q_plist = np.concatenate((self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p, self.Qlist.p), axis=0)						
+			
+			
+			
+			tree_Q = cKDTree(data = Q_xlist)
+			list = tree_Q.query_ball_point(self.Qbarlist.x[i], r = R_search)	## the distance r = 1 fm can be changed
+			
 			for each in list:
-				evt_f = QQbar_form(self.Qlist.x[each], self.Qlist.p[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
+				evt_f = QQbar_form(Q_xlist[each], Q_plist[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
 				if evt_f.rdotp < 0.0:
-					rate_f.append(2.0*evt_f.form_rate())
+					rate_f.append(evt_f.form_rate())
 					# since only half position space contribute due to the xdotp<0
-					# normalization needs doubling the rate
+					# normalization needs changing, factor of 2 already added in the recombination rate
 			len_ratef = len(rate_f)
 			if len_ratef != 0:
 				rate_f = np.array(rate_f)
-				total_rate_f += np.sum(rate_f)/len_ratef
+				total_rate_f += np.sum(rate_f)
+
+
 		return total_rate_f/len_Qbar
+		
+##### -------- end of test evolution function for recombination --------#####

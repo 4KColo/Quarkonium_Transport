@@ -74,21 +74,51 @@ class QQbar_decay:
 		self.T = temperature
 		self.ind_v = int((self.v-v_min)/dv)
 		self.ind_T = int((self.T-T_min)/dT)
-		self.ind_decay = int(self.ind_T*(N_v+1.0)+self.ind_v)
+		
+		self.ind_decay_00 = int(self.ind_T*(N_v+1.0)+self.ind_v)
+		self.ind_decay_01 = 1 + self.ind_decay_00
+		self.ind_decay_10 = int( N_v+1.0 + self.ind_decay_00 )
+		self.ind_decay_11 = 1 + self.ind_decay_10
+		
+		self.z_v = (self.v - v_min)/dv - self.ind_v
+		self.z_T = (self.T - T_min)/dT - self.ind_T
 		
 		
 	def decay_rate(self):
-		return T_decay[self.ind_decay][2]
-
-			
+		# will do a linear interpolation in temperature
+		a0 = T_decay[self.ind_decay_00][2]*(1-self.z_v) + T_decay[self.ind_decay_01][2]*self.z_v
+		a1 = T_decay[self.ind_decay_10][2]*(1-self.z_v) + T_decay[self.ind_decay_11][2]*self.z_v
+		return a0*(1-self.z_T) + a1*self.z_T
+		
+		
 	def sample_init(self): # this step is in the hydro cell
-		maxsam = T_maxsam[self.ind_decay][2] 
+		maxsam = ( (T_maxsam[self.ind_decay_00][2]*(1-self.z_v) + T_maxsam[self.ind_decay_01][2]*self.z_v)*(1-self.z_T)
+		+ (T_maxsam[self.ind_decay_10][2]*(1-self.z_v) + T_maxsam[self.ind_decay_11][2]*self.z_v)*self.z_T )
 		####--- max value of the sampling function (integrand of dq) given a v and T
 		while True:
 			q = rd.uniform(q_min, q_max)
+			ind_q = int((q-q_min)/dq)
+			z_q = (q-q_min)/dq - ind_q
+			
 			f_q = rd.uniform(0.0, maxsam)
+			
 			index = int( int((q-q_min)/dq)  + self.ind_v*(N_q+1.0) + self.ind_T*(N_q+1.0)*(N_v+1.0) )
-			if f_q <= T_sam[index][3]:
+			index000 = int( ind_q + self.ind_decay_00*(N_q+1.0) )
+			index001 = 1 + index000
+			index010 = int( ind_q + self.ind_decay_01*(N_q+1.0) )
+			index011 = 1 + index010
+			index100 = int( ind_q + self.ind_decay_10*(N_q+1.0) )
+			index101 = 1 + index100
+			index110 = int( ind_q + self.ind_decay_11*(N_q+1.0) )
+			index111 = 1 + index110
+			
+			f_00 = T_sam[index000][3]*(1-z_q)+T_sam[index001][3]*z_q
+			f_01 = T_sam[index010][3]*(1-z_q)+T_sam[index011][3]*z_q
+			f_10 = T_sam[index100][3]*(1-z_q)+T_sam[index101][3]*z_q
+			f_11 = T_sam[index110][3]*(1-z_q)+T_sam[index111][3]*z_q
+			f_sample = ( f_00*(1-self.z_v) + f_01*self.z_v )*(1-self.z_T)+( f_10*(1-self.z_v) + f_11*self.z_v )*self.z_T
+			
+			if f_q <= f_sample:
 				break
 		
 		####--- then sample x = cos(theta) and phi
