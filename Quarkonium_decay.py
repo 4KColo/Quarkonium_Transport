@@ -66,10 +66,10 @@ def angular_sample(A, v, y):
 
 class QQbar_decay:
 	def __init__(self, com_momentum, temperature):
-	# com_momentum is the momentum vector of the quarkonium in the hydro cell frame
+	# com_momentum is the 4-momentum vector of the quarkonium in the hydro cell frame
 	#---------- and it has to be a NUMPY array ------ !!!!!!!!
 	# initialize the quarkonium velocity in the hydro cell frame and the temperature
-		self.v3 = com_momentum/np.sqrt(np.sum(com_momentum**2)+M_1S**2)
+		self.v3 = com_momentum[1:]/com_momentum[0]
 		self.v = np.sqrt(np.sum(self.v3**2))
 		self.T = temperature
 		self.ind_v = int((self.v-v_min)/dv)

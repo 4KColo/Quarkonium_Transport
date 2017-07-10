@@ -41,8 +41,8 @@ def pct(N_tot, T, L):		# DO NOT forget the color and spin multiplies, but we do 
 	# L is the side length in fm of the box
 	# solve for fugacity first
 	Vol = (L/C1)**3		#in MeV^-3
-	a = I_p(M_1S, T)
-	b = I_p(M, T)
+	a = I_p(M_1S, T)*4.0
+	b = I_p(M, T)*3.0*2.0
 	c = -N_tot/Vol
 	fugacity = ( -b+np.sqrt(b**2-4.0*a*c) )/(2.0*a)
 	r = fugacity*a/(fugacity*a+b)
@@ -53,8 +53,8 @@ def pct_nr(N_tot, T, L):		# DO NOT forget the color and spin multiplies, but we 
 	# L is the side length in fm of the box
 	# solve for fugacity first
 	Vol = (L/C1)**3		#in MeV^-3
-	a = Inr_p(M_1S, T)
-	b = Inr_p(M, T)
+	a = Inr_p(M_1S, T)*4.0
+	b = Inr_p(M, T)*3.0*2.0
 	c = -N_tot/Vol
 	fugacity = ( -b+np.sqrt(b**2-4.0*a*c) )/(2.0*a)
 	r = fugacity*a/(fugacity*a+b)
@@ -131,7 +131,7 @@ plt.show()
 
 #### ------------ multiple runs averaged and compare ---------------- ####
 N_ave = 1000		# #of parallel runnings
-T = 150.0		
+T = 350.0		
 N_step = 7500
 dt = 0.04
 tmax = N_step*dt
@@ -140,14 +140,14 @@ Nq0 = 50		# initial number of Q or Qbar
 N1s0 = 0		# initial number of U1s
 N1s_t = []	# to store number of U1s in each time step
 Nq_t = []	# to store number of Q or Qbar in each time step
-
+P_sample = 1000.0	# MeV, initial uniform sampling
 
 
 ## initialize N_ave number of events
 events = []
 for i in range(N_ave):
-	events.append(QQbar_evol('static',temperature = T))
-	events[i].initialize(N_Q = Nq0, N_U1S = N1s0)
+	events.append(QQbar_evol('static', temperature = T, HQ_scat = False))
+	events[i].initialize(N_Q = Nq0, N_U1S = N1s0, thermal_dist = False, Pmax = P_sample)
 
 
 ## next store the N(t), px, py, pz into arrays
@@ -188,9 +188,14 @@ r_Q_nr = 1.0-r_U1s_nr
 
 
 #### ------------ save the data in a h5py file ------------- ####
-file1 = h5py.File('T='+str(T)+'N_event='+str(N_ave)+'N_step='+str(N_step)+'Nb0='+str(Nq0)+'Nu0='+str(N1s0)+'.hdf5')
+Ep = events[0].U1Slist.p
+for i in range(1, N_ave):
+	Ep = np.append(Ep, events[i].U1Slist.p, axis=0)
+
+file1 = h5py.File('noHqEvo_Pmax='+str(P_sample)+'T='+str(T)+'N_event='+str(N_ave)+'N_step='+str(N_step)+'Nb0='+str(Nq0)+'Nu0='+str(N1s0)+'.hdf5')
 file1.create_dataset('percentage', data = N1s_r)
-file1.create_dataset('time', data= t)
+file1.create_dataset('time', data = t)
+file1.create_dataset('4momentum', data = Ep)
 file1.close()
 
 #### ------------ end of saving the file ------------- ####

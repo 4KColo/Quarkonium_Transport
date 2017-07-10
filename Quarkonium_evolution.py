@@ -6,6 +6,8 @@ from scipy.spatial import cKDTree
 from particle import Particlelist
 from Quarkonium_decay import QQbar_decay
 from Quarkonium_recombine import QQbar_form
+from HQ_momentum import HQ_p_update
+
 
 #### --------- some constants -----------------------------
 alpha_s = 0.3 # for bottomonium
@@ -30,7 +32,7 @@ def lorentz(p4, v):
 		raise ValueError('second argument of lorentz transformation must be a 3-vector')
 	v_sq = v[0]**2+v[1]**2+v[2]**2
 	if v_sq == 0.0:
-		return np.array([p4[1],p4[2],p4[3]])
+		return p4
 	else:
 		gamma = 1.0/np.sqrt(1.0-v_sq)
 		vdotp = v[0]*p4[1]+v[1]*p4[2]+v[2]*p4[3]
@@ -38,8 +40,8 @@ def lorentz(p4, v):
 		px = -gamma*v[0]*p4[0] + p4[1] +(gamma-1.0)*v[0]*vdotp/v_sq
 		py = -gamma*v[1]*p4[0] + p4[2] +(gamma-1.0)*v[1]*vdotp/v_sq
 		pz = -gamma*v[2]*p4[0] + p4[3] +(gamma-1.0)*v[2]*vdotp/v_sq
-		return np.array([px,py,pz])
-		#return [E,px,py,pz]
+		#return np.array([px,py,pz])
+		return np.array([E,px,py,pz])
 		
 
 ####------ end of lorentz transformation function -----------
@@ -103,34 +105,51 @@ def thermal_sample(temp, mass):
 		if y_try < thermal_dist(temp, mass, p_try):
 			break
 	
+	E = np.sqrt(p_try**2+mass**2)
 	cos_theta = rd.uniform(-1.0, 1.0)
 	sin_theta = np.sqrt(1.0-cos_theta**2)
 	phi = rd.uniform(0.0, 2.0*np.pi)
 	cos_phi = np.cos(phi)
 	sin_phi = np.sin(phi)
-	return np.array([ p_try*sin_theta*cos_phi, p_try*sin_theta*sin_phi, p_try*cos_theta ])
-
+	#return np.array([ p_try*sin_theta*cos_phi, p_try*sin_theta*sin_phi, p_try*cos_theta ])
+	return np.array([ E, p_try*sin_theta*cos_phi, p_try*sin_theta*sin_phi, p_try*cos_theta ])
 
 ####---- end of initial sample of heavy Q and Qbar using thermal distribution ---- ####
 
 
 
 
+####--------- initial sample of heavy Q and Qbar using uniform distribution ------ ####
+def uniform_sample(Pmax, mass):
+	px, py, pz = (np.random.rand(3)-0.5)*2*Pmax
+	E = np.sqrt(mass**2 + px**2 + py**2 + pz**2)
+	return np.array([E, px, py, pz])
+	
+####---- end of initial sample of heavy Q and Qbar using uniform distribution ---- ####
+
+
+
 
 class QQbar_evol:
 #---- input the medium_type when calling the class ----
-	def __init__(self, medium_type, temperature = 300.0, recombine = True):
+	def __init__(self, medium_type, temperature = 300.0, recombine = True, HQ_scat = False):
 		self.type = medium_type		# for static type, the input temperature will be used
 		self.T = temperature
 		self.recombine = recombine
+		self.HQ_scat = HQ_scat
+
 
 #---- initialize the Q, Qbar and Quarkonium -- currently we only study Upsilon(1S)
-	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, Pmax = 5000.0):
+	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, thermal_dist = True, decaytestmode = False, Pmax = 5000.0, P_decaytest = [0.0, 0.0, 5000.0]):
 		self.Lmax = 10.0
 #---- first determine medium type and then initialize
 		if self.type == 'static':
 	#---- static medium!! parameters only make sense in STATIC mode------
-	#------ Lmax = 10 fm, 3-D box size, Pmax = 5 GeV ------
+	#------ Lmax = 10 fm, 3-D box size  --------
+	# if thermal_dist = False and decay_test_mode = False, 
+	# then initial distribution is flat in all three directions, uniform in [0, Pmax]
+	# if decaytestmode = True, give quarkonium initial [Px, Py, Pz] in the initialization
+
 			self.Qlist = Particlelist()
 			self.Qbarlist = Particlelist()
 			self.U1Slist = Particlelist()
@@ -139,41 +158,60 @@ class QQbar_evol:
 			self.Qbarlist.id = -5		# anti b quark
 			self.U1Slist.id = 533		# Upsilon(1S)
 	
-			#--- sample their initial positions x and momentum p
+			#--- sample their initial positions x
 			self.Qlist.x = np.array([np.random.rand(3)*Lmax for i in range(N_Q)])
 			self.Qbarlist.x = np.array([np.random.rand(3)*Lmax for i in range(N_Q)])
 			self.U1Slist.x = np.array([np.random.rand(3)*Lmax for i in range(N_U1S)])
 			
-			# uniform distribution of initial momenta
-			#self.Qlist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_Q)])
-			#self.Qbarlist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_Q)])
-			#self.U1Slist.p = np.array([(np.random.rand(3)-0.5)*2*Pmax for i in range(N_U1S)])
 			
-			# the following is used in test of decay rates
-			#self.U1Slist.p = np.array([ [5000.0, 0.0, 0.0] for i in range(N_U1S)])
-			#self.U1Slist.p = np.array([ [0.0, 0.0, 0.0] for i in range(N_U1S)])
-			
+			#--- sample their initial momenta p
+			if thermal_dist == True:
 			# thermal distribution of initial momenta
-			self.Qlist.p = np.array([ thermal_sample(self.T, M) for i in range(N_Q)])
-			self.Qbarlist.p = np.array([ thermal_sample(self.T, M) for i in range(N_Q)])
-			self.U1Slist.p = np.array([ thermal_sample(self.T, M_1S) for i in range(N_U1S)])
+				self.Qlist.p = np.array([ thermal_sample(self.T, M) for i in range(N_Q)])
+				self.Qbarlist.p = np.array([ thermal_sample(self.T, M) for i in range(N_Q)])
+				self.U1Slist.p = np.array([ thermal_sample(self.T, M_1S) for i in range(N_U1S)])
+			
+			elif decaytestmode == True:
+			# the following is used in test of decay rates
+				E_decaytest = np.sqrt(M**2 + P_decaytest[0]**2 + P_decaytest[1]**2 + P_decaytest[2]**2)
+				self.Qlist.p = np.array([ [M, 0.0, 0.0, 0.0] for i in range(N_Q)])
+				self.Qbarlist.p = np.array([ [M, 0.0, 0.0, 0.0] for i in range(N_Q)])
+				self.U1Slist.p = np.array([ np.append(E_decaytest, P_decaytest) for i in range(N_U1S)])
 
+			else:
+			# uniform distribution of initial momenta
+				self.Qlist.p = np.array([ uniform_sample(Pmax, M) for i in range(N_Q)])
+				self.Qbarlist.p = np.array([ uniform_sample(Pmax, M) for i in range(N_Q)])
+				self.U1Slist.p = np.array([ uniform_sample(Pmax, M_1S) for i in range(N_U1S)])
+			
 
+			
 
 #####------------ evolution function -------------- #####
-	def run(self, dt = 0.04):		#--- time step is universal since we include recombination
-	
-		### --------- free stream Q, Qbar, U1S first ------------
+	def run(self, dt = 0.04, temp_run = -1.0):		#--- time step is universal since we include recombination
 		len_U1S = len(self.U1Slist.x)
 		len_Qbar = len(self.Qbarlist.x)		#notice len_Qbar = len_Q
+		if temp_run != -1.0:
+			self.T = temp_run
+			
+		### --------- update HQ momentum if HQ_scatter is switched on --------
+		if self.HQ_scat == True:
+			HQ_event = HQ_p_update()
+			self.Qlist.p = np.array([ HQ_event.update(HQ_Ep = self.Qlist.p[i], Temp = self.T/1000.0, time_step = dt) for i in range(len_Qbar)])
+			self.Qbarlist.p = np.array([ HQ_event.update(HQ_Ep = self.Qbarlist.p[i], Temp = self.T/1000.0, time_step = dt) for i in range(len_Qbar)])
+
+		### --------- end of update HQ momentum ----------
 		
+		
+		
+		### --------- then free stream Q, Qbar, U1S ------------
 		if len_U1S != 0:
-			v_U1S = np.array( [self.U1Slist.p[i]/np.sqrt(np.sum(self.U1Slist.p[i]**2)+M_1S**2) for i in range(len_U1S)] )
+			v_U1S = np.array( [self.U1Slist.p[i][1:]/self.U1Slist.p[i][0] for i in range(len_U1S)] )
 			self.U1Slist.x = (self.U1Slist.x + dt*v_U1S )%self.Lmax
 			
 		if len_Qbar != 0:
-			v_Q = np.array( [self.Qlist.p[i]/np.sqrt(np.sum(self.Qlist.p[i]**2)+M**2) for i in range(len_Qbar)] )
-			v_Qbar = np.array( [self.Qbarlist.p[i]/np.sqrt(np.sum(self.Qbarlist.p[i]**2)+M**2) for i in range(len_Qbar)] )
+			v_Q = np.array( [self.Qlist.p[i][1:]/self.Qlist.p[i][0] for i in range(len_Qbar)] )
+			v_Qbar = np.array( [self.Qbarlist.p[i][1:]/self.Qbarlist.p[i][0] for i in range(len_Qbar)] )
 			
 			self.Qlist.x = (self.Qlist.x + dt*v_Q )%self.Lmax
 			self.Qbarlist.x = (self.Qbarlist.x + dt*v_Qbar )%self.Lmax
@@ -217,7 +255,7 @@ class QQbar_evol:
 				E_Q = np.sqrt(  np.sum(recoil_p_Q**2) + M**2  )
 				E_Qbar = np.sqrt(  np.sum(recoil_p_Qbar**2) + M**2  )
 				
-			#--- the tempmomentum needs to be rotated from the v = z axis to the medium frame
+			#--- the Q, Qbar momenta need to be rotated from the v = z axis to the medium frame
 				#---- first get the rotation matrix angles
 				theta_rot, phi_rot = angle(evt.v3)
 				rotmomentum_Q = rotation(recoil_p_Q, theta_rot, phi_rot)
@@ -407,6 +445,8 @@ class QQbar_evol:
 				
 				for each in list:
 					evt_f = QQbar_form(Q_xlist[each], Q_plist[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
+					
+					## first implementation has xdotp < 0
 					if evt_f.rdotp < 0.0:
 						rate_f.append(evt_f.form_rate())
 					else:
@@ -414,6 +454,9 @@ class QQbar_evol:
 						# since only half position space contribute due to the xdotp<0
 						# normalization needs doubling the rate, which is already included in the form_rate
 			
+					## second on has no xdotp
+					#rate_f.append(evt_f.form_rate())
+					
 				prob_random = np.random.rand(1)
 				prob_f = 8.0/9.0*np.array(rate_f)*dt/C1
 				len_list = len(prob_f)
@@ -678,10 +721,16 @@ class QQbar_evol:
 			
 			for each in list:
 				evt_f = QQbar_form(Q_xlist[each], Q_plist[each], self.Qbarlist.x[i], self.Qbarlist.p[i], self.T)
+				
+				## first implementation has xdotp < 0
 				if evt_f.rdotp < 0.0:
 					rate_f.append(evt_f.form_rate())
 					# since only half position space contribute due to the xdotp<0
 					# normalization needs changing, factor of 2 already added in the recombination rate
+				
+				## second one has no xdotp
+				#rate_f.append(evt_f.form_rate())
+				
 			len_ratef = len(rate_f)
 			if len_ratef != 0:
 				rate_f = np.array(rate_f)
