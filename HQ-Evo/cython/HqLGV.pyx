@@ -12,6 +12,10 @@ cdef double GeV_to_Invfm = 5.068
 
 #------------------Import C++ fucntions and class for Xsection and rates------------------
 cdef extern from "../src/matrix_elements.h":
+	cdef void initialize_Debye_mass(const unsigned int mDtype, const double mDTc,
+						   const double mDslope, const double mDcurv, 
+						   const double Tc)
+
 	cdef double dqhat_Qq2Qq_dPS(double* PS, size_t ndims, void* params) 
 	cdef double dqhat_Qg2Qg_dPS(double* PS, size_t ndims, void* params) 
 
@@ -42,15 +46,25 @@ cdef class HqLGV:
 	cdef Qhat_2to2 * qhat_Qq2Qq
 	cdef Qhat_2to2 * qhat_Qg2Qg 
 	cdef size_t Nf
-	cdef double mass, deltat_lrf
+	cdef double mass, deltat_lrf, Kfactor
 	cdef public vector[double] pre_result, post_result
 		
 	def __cinit__(self, options, table_folder='./tables', refresh_table=False):
 		self.mass = options['mass']
 		self.Nf = options['Nf']
-		self.elastic = options['elastic']
-		self.EinR = options['Einstein']
-		self.deltat_lrf = options['dt_lrf']
+		self.elastic = options['transport']['elastic']
+		self.EinR = options['transport']['Einstein']
+		self.deltat_lrf = options['transport']['dt_lrf']
+		self.Kfactor = options['Kfactor']
+
+		# set mD
+		cdef double Tc = options['Tc']
+		cdef unsigned int mD_type = options['mD']['mD-model']
+		cdef double mDTc = options['mD']['mTc']
+		cdef double mDslope = options['mD']['slope']
+		cdef double mDcurv = options['mD']['curv']
+		print "mD:", mD_type, mDTc, mDslope, mDcurv, Tc
+		initialize_Debye_mass(mD_type, mDTc, mDslope, mDcurv, Tc)
 		
 		if not os.path.exists(table_folder):
 			os.makedirs(table_folder)
@@ -68,15 +82,16 @@ cdef class HqLGV:
 					kpara_Qq, kpara_Qg, kpara
 		cdef double p_length = sqrt(E1*E1 - self.mass*self.mass)
 		cdef double * arg = <double*> malloc(3*sizeof(double))
-		arg[0] = E1; arg[1] = temp; arg[2] = 0;
-		drag_Qq = self.qhat_Qq2Qq.interpQ(arg)
-		drag_Qg = self.qhat_Qg2Qg.interpQ(arg)
+		arg[0] = E1; arg[1] = temp; 
+		arg[2] = 0
+		drag_Qq = self.qhat_Qq2Qq.interpQ(arg)*self.Kfactor
+		drag_Qg = self.qhat_Qg2Qg.interpQ(arg)*self.Kfactor
 		arg[2] = 1
-		kperp_Qq = self.qhat_Qq2Qq.interpQ(arg)
-		kperp_Qg = self.qhat_Qg2Qg.interpQ(arg)
+		kperp_Qq = self.qhat_Qq2Qq.interpQ(arg)*self.Kfactor
+		kperp_Qg = self.qhat_Qg2Qg.interpQ(arg)*self.Kfactor
 		arg[2] = 2
-		kpara_Qq = self.qhat_Qq2Qq.interpQ(arg)
-		kpara_Qg = self.qhat_Qg2Qg.interpQ(arg)
+		kpara_Qq = self.qhat_Qq2Qq.interpQ(arg)*self.Kfactor
+		kpara_Qg = self.qhat_Qg2Qg.interpQ(arg)*self.Kfactor
 
 		
 		drag = (drag_Qq + drag_Qg) / p_length * GeV_to_Invfm
@@ -90,11 +105,11 @@ cdef class HqLGV:
 
 		arg[0] = new_energy
 		arg[2] = 1
-		kperp_Qq = self.qhat_Qq2Qq.interpQ(arg)
-		kperp_Qg = self.qhat_Qg2Qg.interpQ(arg)
+		kperp_Qq = self.qhat_Qq2Qq.interpQ(arg)*self.Kfactor
+		kperp_Qg = self.qhat_Qg2Qg.interpQ(arg)*self.Kfactor
 		arg[2] = 2
-		kpara_Qq = self.qhat_Qq2Qq.interpQ(arg)
-		kpara_Qg = self.qhat_Qg2Qg.interpQ(arg)
+		kpara_Qq = self.qhat_Qq2Qq.interpQ(arg)*self.Kfactor
+		kpara_Qg = self.qhat_Qg2Qg.interpQ(arg)*self.Kfactor
 
 		free(arg)
 		kperp = (kperp_Qq + kperp_Qg) * GeV_to_Invfm

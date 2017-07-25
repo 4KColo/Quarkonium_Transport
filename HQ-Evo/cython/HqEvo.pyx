@@ -10,6 +10,10 @@ import os
 
 #------------------Import C++ fucntions and class for Xsection and rates------------------
 cdef extern from "../src/matrix_elements.h":
+	cdef void initialize_Debye_mass(const unsigned int mDtype, const double mDTc,
+						   const double mDslope, const double mDcurv, 
+						   const double Tc)
+
 	cdef double dX_Qq2Qq_dPS(double * PS, size_t n_dims, void * params)  
 	cdef double dX_Qg2Qg_dPS(double * PS, size_t n_dims, void * params) 
 
@@ -67,17 +71,24 @@ cdef class HqEvo(object):
 	cdef rates_3to2 * r_Qqg_Qq
 	cdef rates_3to2 * r_Qgg_Qg
 	cdef size_t Nchannels, Nf
-	cdef double mass, Kfactor
+	cdef double mass, Kfactor, Tc
 	cdef public vector[vector[double]] IS, FS
 	
 	def __cinit__(self, options, table_folder='./tables', refresh_table=False):
-		self.elastic=options['2->2']
-		self.inelastic=options['2->3']
-		self.detailed_balance=options['3->2']
+		self.elastic=options['transport']['2->2']
+		self.inelastic=options['transport']['2->3']
+		self.detailed_balance=options['transport']['3->2']
 		self.Nchannels = 0
 		self.mass = options['mass']
 		self.Nf = options['Nf']
 		self.Kfactor = options['Kfactor']
+		# set mD
+		cdef double Tc = options['Tc']
+		cdef unsigned int mD_type = options['mD']['mD-model']
+		cdef double mDTc = options['mD']['mTc']
+		cdef double mDslope = options['mD']['slope']
+		cdef double mDcurv = options['mD']['curv']
+		initialize_Debye_mass(mD_type, mDTc, mDslope, mDcurv, Tc)
 		
 		if not os.path.exists(table_folder):
 			os.makedirs(table_folder)

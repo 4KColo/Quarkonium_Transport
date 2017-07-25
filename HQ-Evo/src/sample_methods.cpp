@@ -35,14 +35,16 @@ double rejection_1d::sample(double (*f_) (double * x, size_t n_dims, void * para
 		ele.w = cumulate;
 	}
 	double r1, r2, xl, dx, fl, df, fh, lambda, xtry;
-	size_t i;
 	do{
 		r1 = std::rand()*1./RAND_MAX;
-		i=0;
-		while (intervals[i].w < r1) i++;
-		xl = intervals[i].xL; dx = intervals[i].dx;
-		fl = intervals[i].fL; df = intervals[i].df;
-		fh = fl+df;
+		for (auto&& ele : intervals){
+			if (ele.w > r1) {
+				xl = ele.xL; dx = ele.dx;
+				fl = ele.fL; df = ele.df;
+				fh = fl+df;
+				break;
+			}
+		}
 		r2 = std::rand()*1./RAND_MAX;
 		lambda = ( std::sqrt(fl*fl*(1.-r2) + fh*fh*r2) -fl )/df;
 		xtry = xl + lambda*dx;
@@ -55,11 +57,11 @@ double rejection_1d::plain_sample(double (*f_) (double * x, size_t n_dims, void 
 	xlo = xlo_;
 	xhi = xhi_;
 	params = params_;
-	double dx = (xhi-xlo), xtry;
-	double h = std::max(f(&xlo, 1, params), f(&xhi, 1, params));
+	double dx = xhi-xlo, xtry;
+	double fmax = std::max(f(&xlo, 1, params), f(&xhi, 1, params));
 	do{
-		xtry = xlo + dx*std::rand()*1./RAND_MAX;
-	}while (f(&xtry, 1, params)/h < std::rand()*1./RAND_MAX);
+		xtry = xlo + std::rand()*dx/RAND_MAX;
+	}while (f(&xtry, 1, params)/fmax*RAND_MAX < std::rand());
 	return xtry;
 }
 

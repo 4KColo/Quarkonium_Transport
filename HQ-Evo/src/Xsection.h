@@ -8,6 +8,7 @@
 #include <boost/multi_array.hpp>
 #include "sample_methods.h"
 
+
 /* all the differential Xsection function are declared by type "double f(double * arg, size_t n_dims, void * params)"
 	This type is natural for gsl vegas integration, but does not match the type for gsl 1d integration which requires double f(double x, void * params)
 	Therefore, for 1d integration, use the struct below. It stores both the function call and the numerical parameters:
@@ -53,7 +54,7 @@ private:
 	void save_to_file(std::string filename, std::string datasetname);
 	void read_from_file(std::string filename, std::string datasetname);
 	size_t Nsqrts, NT;
-	double sqrtsL, sqrtsM, sqrtsH, dsqrts1, dsqrts2,
+	double sqrtsL, sqrtsH, dsqrts,
 		   TL, TH, dT;
 	boost::multi_array<double, 2> Xtab;
 public:
