@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import numpy as np
 import h5py
+import csv
 import random as rd
 from scipy.spatial import cKDTree
 from particle import Particlelist
@@ -125,7 +126,51 @@ def uniform_sample(Pmax, mass):
 	E = np.sqrt(mass**2 + px**2 + py**2 + pz**2)
 	return np.array([E, px, py, pz])
 	
-####---- end of initial sample of heavy Q and Qbar using uniform distribution ---- ####
+####----- end of initial sample of heavy Q and Qbar using uniform distribution ---- ####
+
+
+
+
+####-------- initial sample of heavy Q and Qbar using FONLL pT distribution (y=0)---- ####
+#--- treat pT as magnitude of vector p, since we are doing a spherically symmetric system
+pT = []
+dsigma = []
+
+
+file = open('FO-spectra2760GeVPbPb-dsigma-dpt2-dy.dat', 'r')
+reader = csv.reader(file, delimiter='\t')
+for row in reader:
+	pT.append(float(row[0]))
+	dsigma.append(float(row[1])*1000.0)
+file.close()
+
+num = len(pT)
+pTmin = pT[0]
+pTmax = pT[num-1]
+d_pT = (pTmax - pTmin)/(num-1)
+dsigmamax = dsigma[0]
+
+def fonll_sample(mass):
+	while True:
+		pT_try = rd.uniform(pTmin, pTmax)
+		pT_index = int((pT_try - pTmin)/d_pT)
+		dsigma_try = rd.uniform(0.0, dsigmamax)
+		if dsigma_try < dsigma[pT_index]:
+			break
+	p_try = pT_try*1000.0
+	E = np.sqrt(p_try**2+mass**2)
+	cos_theta = rd.uniform(-1.0, 1.0)
+	sin_theta = np.sqrt(1.0-cos_theta**2)
+	phi = rd.uniform(0.0, 2.0*np.pi)
+	cos_phi = np.cos(phi)
+	sin_phi = np.sin(phi)
+	#return np.array([ p_try*sin_theta*cos_phi, p_try*sin_theta*sin_phi, p_try*cos_theta ])
+	return np.array([ E, p_try*sin_theta*cos_phi, p_try*sin_theta*sin_phi, p_try*cos_theta ])
+
+
+####--- end of initial sample of heavy Q and Qbar using FONLL pT distribution (y=0) --- ####
+
+
 
 
 
@@ -140,13 +185,13 @@ class QQbar_evol:
 
 
 #---- initialize the Q, Qbar and Quarkonium -- currently we only study Upsilon(1S)
-	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, thermal_dist = True, decaytestmode = False, Pmax = 5000.0, P_decaytest = [0.0, 0.0, 5000.0]):
+	def initialize(self, N_Q = 100, N_U1S = 10, Lmax = 10.0, thermal_dist = True, FONLL_dist = False, decaytestmode = False, Pmax = 5000.0, P_decaytest = [0.0, 0.0, 5000.0]):
 		self.Lmax = 10.0
 #---- first determine medium type and then initialize
 		if self.type == 'static':
 	#---- static medium!! parameters only make sense in STATIC mode------
 	#------ Lmax = 10 fm, 3-D box size  --------
-	# if thermal_dist = False and decay_test_mode = False, 
+	# if thermal_dist = False, FONLL_dist = False and decay_test_mode = False, 
 	# then initial distribution is flat in all three directions, uniform in [0, Pmax]
 	# if decaytestmode = True, give quarkonium initial [Px, Py, Pz] in the initialization
 
@@ -171,6 +216,12 @@ class QQbar_evol:
 				self.Qbarlist.p = np.array([ thermal_sample(self.T, M) for i in range(N_Q)])
 				self.U1Slist.p = np.array([ thermal_sample(self.T, M_1S) for i in range(N_U1S)])
 			
+			elif FONLL_dist == True:
+			# FONLL pT calculation but treat pT as |vector p|
+				self.Qlist.p = np.array([ fonll_sample(M) for i in range(N_Q)])
+				self.Qbarlist.p = np.array([ fonll_sample(M) for i in range(N_Q)])
+				self.U1Slist.p = np.array([ fonll_sample(M_1S) for i in range(N_U1S)])
+
 			elif decaytestmode == True:
 			# the following is used in test of decay rates
 				E_decaytest = np.sqrt(M**2 + P_decaytest[0]**2 + P_decaytest[1]**2 + P_decaytest[2]**2)
